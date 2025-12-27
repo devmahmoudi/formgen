@@ -79,7 +79,7 @@ export default function FormList() {
   };
 
   const countFields = (schema: Record<string, any>) => {
-    return schema?.fields?.length || 0;
+    return JSON.parse(schema)?.fields?.length || 0;
   };
 
   if (loading) {
