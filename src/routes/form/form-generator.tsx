@@ -1,9 +1,11 @@
-import React from 'react'
+import FormGenerator from "@/components/form-generator/form-generator";
+import { Toaster } from "@/components/ui/sonner";
 
-function FormGenerator() {
+export default function FormGeneratorPage() {
   return (
-    <div>FormGenerator</div>
-  )
+    <>
+      <FormGenerator />
+      <Toaster />
+    </>
+  );
 }
-
-export default FormGenerator
