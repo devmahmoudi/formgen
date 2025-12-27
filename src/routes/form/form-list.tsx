@@ -154,7 +154,7 @@ export default function FormList() {
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
             </Button>
-            <Link to="/form-generator">
+            <Link to="/form/generator">
               <Button>
                 <Plus className="w-4 h-4 mr-2" />
                 Create Form

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useMutation } from "@apollo/client/react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,12 +8,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import FieldItem from "./field-item";
-import { Plus, Copy, Download } from "lucide-react";
+import { Plus, Copy, Download, Save, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import type { FieldType, FormField, FormSchema } from "./types";
+import { CREATE_FORM } from "@/graphql/queries";
+import type { FormSchema, FormField } from "./types";
 
 // Export types for external use
-export type { FieldType, FormField, FormSchema };
+export type { FormSchema, FormField };
 
 export default function FormGenerator() {
   const [form, setForm] = useState<FormSchema>({
@@ -40,6 +42,8 @@ export default function FormGenerator() {
       }
     ]
   });
+
+  const [createFormMutation, { loading: saving }] = useMutation(CREATE_FORM);
 
   const addField = () => {
     const newId = `field_${Date.now()}`;
@@ -95,22 +99,111 @@ export default function FormGenerator() {
     toast.success("JSON downloaded!");
   };
 
+  const handleSaveToDatabase = async () => {
+    if (!form.title.trim()) {
+      toast.error("Please enter a form title");
+      return;
+    }
+
+    try {
+      // Prepare the form data for Supabase
+      // Create a clean schema object - just the fields array
+      const schemaData = {
+        fields: form.fields.map(field => ({
+          id: field.id,
+          type: field.type,
+          label: field.label,
+          required: field.required,
+          placeholder: field.placeholder || null
+        }))
+      };
+
+      console.log("Preparing to save:", {
+        title: form.title,
+        description: form.description,
+        schema: schemaData
+      });
+
+      const result = await createFormMutation({
+        variables: {
+          objects: [
+            {
+              title: form.title,
+              description: form.description || null,
+              schema: schemaData,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            }
+          ]
+        }
+      });
+
+      console.log("Save result:", result);
+
+      if (result.data?.insertIntoformsCollection?.records?.length > 0) {
+        toast.success("Form saved successfully to database!");
+        
+        // Optional: Reset form after successful save
+        // setForm({
+        //   title: "",
+        //   description: "",
+        //   fields: []
+        // });
+      } else {
+        toast.error("No records were created");
+      }
+      
+    } catch (error: any) {
+      console.error("Save error:", error);
+      
+      // Try alternative: Pass schema as stringified JSON
+      try {
+        const schemaString = JSON.stringify({
+          fields: form.fields.map(field => ({
+            id: field.id,
+            type: field.type,
+            label: field.label,
+            required: field.required,
+            placeholder: field.placeholder || null
+          }))
+        });
+
+        console.log("Trying alternative with stringified JSON:", schemaString);
+
+        const altResult = await createFormMutation({
+          variables: {
+            objects: [
+              {
+                title: form.title,
+                description: form.description || null,
+                schema: schemaString, // Pass as JSON string
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              }
+            ]
+          }
+        });
+
+        console.log("Alternative save result:", altResult);
+        
+        if (altResult.data?.insertIntoformsCollection?.records?.length > 0) {
+          toast.success("Form saved successfully (stringified JSON)!");
+        } else {
+          toast.error("Form not saved with alternative method");
+        }
+        
+      } catch (altError: any) {
+        toast.error(`Failed to save form: ${altError.message}`);
+      }
+    }
+  };
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold">Form Generator</h1>
-          <p className="text-muted-foreground">Build forms visually and export as JSON</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={copyToClipboard}>
-            <Copy className="w-4 h-4 mr-2" />
-            Copy JSON
-          </Button>
-          <Button onClick={downloadJSON}>
-            <Download className="w-4 h-4 mr-2" />
-            Download JSON
-          </Button>
+          <p className="text-muted-foreground">Build forms visually and export as JSON or save to database</p>
         </div>
       </div>
 
@@ -124,16 +217,17 @@ export default function FormGenerator() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="title">Form Title</Label>
+                <Label htmlFor="title">Form Title *</Label>
                 <Input
                   id="title"
                   value={form.title}
                   onChange={(e) => setForm(prev => ({ ...prev, title: e.target.value }))}
                   placeholder="Enter form title"
+                  required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
+                <Label htmlFor="description">Description (Optional)</Label>
                 <Textarea
                   id="description"
                   value={form.description}
@@ -174,8 +268,57 @@ export default function FormGenerator() {
           </Card>
         </div>
 
-        {/* Right Column - Preview & JSON Output */}
+        {/* Right Column - Actions, Preview & JSON Output */}
         <div className="space-y-6">
+          {/* Action Buttons */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Actions</CardTitle>
+              <CardDescription>Save or export your form</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <Button 
+                  onClick={handleSaveToDatabase} 
+                  className="w-full"
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      Save to Database
+                    </>
+                  )}
+                </Button>
+                
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={copyToClipboard}
+                    className="w-full"
+                  >
+                    <Copy className="w-4 h-4 mr-2" />
+                    Copy JSON
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={downloadJSON}
+                    className="w-full"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Download JSON
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Form Preview */}
           <Card>
             <CardHeader>
               <CardTitle>Form Preview</CardTitle>
@@ -185,7 +328,9 @@ export default function FormGenerator() {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <h3 className="text-lg font-semibold">{form.title}</h3>
-                  <p className="text-sm text-muted-foreground">{form.description}</p>
+                  {form.description && (
+                    <p className="text-sm text-muted-foreground">{form.description}</p>
+                  )}
                 </div>
                 
                 <div className="space-y-4">
@@ -226,15 +371,25 @@ export default function FormGenerator() {
             </CardContent>
           </Card>
 
+          {/* JSON Output */}
           <Card>
             <CardHeader>
               <CardTitle>JSON Output</CardTitle>
               <CardDescription>Export this JSON for use in your applications</CardDescription>
             </CardHeader>
             <CardContent>
-              <pre className="bg-muted p-4 rounded-md text-sm overflow-auto max-h-[400px]">
-                {generateJSON()}
-              </pre>
+              <div className="space-y-2">
+                <div className="text-sm text-muted-foreground mb-2">
+                  This is the exact structure that will be saved:
+                </div>
+                <pre className="bg-muted p-4 rounded-md text-sm overflow-auto max-h-[400px]">
+                  {JSON.stringify({
+                    title: form.title,
+                    description: form.description,
+                    fields: form.fields
+                  }, null, 2)}
+                </pre>
+              </div>
             </CardContent>
           </Card>
         </div>
