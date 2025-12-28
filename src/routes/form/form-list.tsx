@@ -155,58 +155,12 @@ export default function FormList() {
               Refresh
             </Button>
             <Link to="/form/generator">
-              <Button>
+              <Button className='cursor-pointer'>
                 <Plus className="w-4 h-4 mr-2" />
                 Create Form
               </Button>
             </Link>
           </div>
-        </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Total Forms</p>
-                  <p className="text-3xl font-bold">{forms.length}</p>
-                </div>
-                <FileText className="w-8 h-8 text-primary" />
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Total Fields</p>
-                  <p className="text-3xl font-bold">
-                    {forms.reduce((acc: number, form: Form) => acc + countFields(form.schema), 0)}
-                  </p>
-                </div>
-                <FileText className="w-8 h-8 text-green-500" />
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Last Created</p>
-                  <p className="text-sm font-medium truncate">
-                    {forms.length > 0 
-                      ? formatDate(forms[0].created_at).split(',')[0]
-                      : 'Never'
-                    }
-                  </p>
-                </div>
-                <Calendar className="w-8 h-8 text-blue-500" />
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Forms Grid */}
@@ -250,17 +204,7 @@ export default function FormList() {
                 
                 <CardContent>
                   <div className="space-y-3">
-                    <div className="flex items-center text-sm text-muted-foreground">
-                      <Calendar className="w-4 h-4 mr-2" />
-                      Created: {formatDate(form.created_at)}
-                    </div>
-                    
-                    {form.updated_at && (
-                      <div className="flex items-center text-sm text-muted-foreground">
-                        <RefreshCw className="w-4 h-4 mr-2" />
-                        Updated: {formatDate(form.updated_at)}
-                      </div>
-                    )}
+
                     
                     {form.schema?.fields && (
                       <div className="pt-2">
@@ -290,20 +234,6 @@ export default function FormList() {
                 
                 <CardFooter className="flex justify-between border-t pt-4">
                   <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleCopySchema(form.schema, form.title)}
-                    >
-                      <Copy className="w-4 h-4" />
-                    </Button>
-                    
-                    <Link to={`/form/${form.id}/preview`}>
-                      <Button size="sm" variant="outline">
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                    </Link>
-                    
                     <Link to={`/form-generator?edit=${form.id}`}>
                       <Button size="sm" variant="outline">
                         <Edit className="w-4 h-4" />
@@ -329,15 +259,6 @@ export default function FormList() {
           </div>
         )}
 
-        {/* Info Alert */}
-        {forms.length > 0 && (
-          <Alert>
-            <AlertDescription className="flex items-center">
-              <FileText className="w-4 h-4 mr-2" />
-              Click on a form to preview, edit, or copy its schema JSON
-            </AlertDescription>
-          </Alert>
-        )}
       </div>
     </div>
   );
