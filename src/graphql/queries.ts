@@ -44,3 +44,33 @@ export const DELETE_FORM = gql`
     }
   }
 `;
+
+export const GET_FORM_BY_ID = gql`
+  query GetFormById($id: uuid!) {
+    formsCollection(filter: { id: { eq: $id } }) {
+      edges {
+        node {
+          id
+          title
+          description
+          schema
+          created_at
+          updated_at
+        }
+      }
+    }
+  }
+`;
+
+export const SUBMIT_FORM_RESPONSE = gql`
+  mutation SubmitFormResponse($objects: [form_submissionsInsertInput!]!) {
+    insertIntorowsCollection(objects: $objects) {
+      records {
+        id
+        form_id
+        data
+        created_at
+      }
+    }
+  }
+`;
