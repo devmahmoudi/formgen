@@ -8,6 +8,7 @@ import NotFoundPage from "./routes/not-found";
 import FormGenerator from "./routes/form/form-generator";
 import FormList from "./routes/form/form-list";
 import SubmitForm from "./routes/form/submit-form";
+import ResponsesIndex from "./routes/response/responses-index";
 
 export const router = createBrowserRouter([
   {
@@ -52,7 +53,11 @@ export const router = createBrowserRouter([
         index: true,
         path: "",
         element: <FormList/>
+      },
+      {
+        path: ":formId/responses", // Add this route
+        element: <ResponsesIndex />,
       }
     ]
-  }
+  },
 ]);

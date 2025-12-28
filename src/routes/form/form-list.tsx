@@ -20,6 +20,7 @@ import {
   RefreshCw,
   Plus,
   LayersPlus,
+  Database,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
@@ -61,9 +62,9 @@ export default function FormList() {
     try {
       await graphqlService.deleteForm(id);
       toast.success(`Form "${title}" deleted successfully`);
-      
+
       // Remove the deleted form from local state
-      setForms(prev => prev.filter(form => form.id !== id));
+      setForms((prev) => prev.filter((form) => form.id !== id));
     } catch (err: any) {
       toast.error("Failed to delete form");
       console.error("Delete error:", err);
@@ -74,11 +75,12 @@ export default function FormList() {
 
   const handleCopySchema = (schema: any, title: string) => {
     try {
-      const schemaToCopy = typeof schema === 'string' ? JSON.parse(schema) : schema;
+      const schemaToCopy =
+        typeof schema === "string" ? JSON.parse(schema) : schema;
       navigator.clipboard.writeText(JSON.stringify(schemaToCopy, null, 2));
       toast.success(`Schema for "${title}" copied to clipboard`);
     } catch (err) {
-      toast.error('Failed to copy schema');
+      toast.error("Failed to copy schema");
       console.error("Copy error:", err);
     }
   };
@@ -95,7 +97,7 @@ export default function FormList() {
 
   const parseSchema = (schema: any) => {
     try {
-      if (typeof schema === 'string') {
+      if (typeof schema === "string") {
         return JSON.parse(schema);
       }
       return schema || { fields: [] };
@@ -146,9 +148,7 @@ export default function FormList() {
     return (
       <div className="container mx-auto p-6">
         <Alert variant="destructive">
-          <AlertDescription>
-            Error loading forms: {error}
-          </AlertDescription>
+          <AlertDescription>Error loading forms: {error}</AlertDescription>
         </Alert>
         <Button onClick={fetchForms} variant="outline" className="mt-4">
           <RefreshCw className="w-4 h-4 mr-2" />
@@ -205,12 +205,17 @@ export default function FormList() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {forms.map((form: Form) => {
               const parsedSchema = parseSchema(form.schema);
-              const fieldTypes = parsedSchema?.fields 
-                ? Array.from(new Set(parsedSchema.fields.map((f: any) => f.type)))
+              const fieldTypes = parsedSchema?.fields
+                ? Array.from(
+                    new Set(parsedSchema.fields.map((f: any) => f.type))
+                  )
                 : [];
 
               return (
-                <Card key={form.id} className="hover:shadow-lg transition-shadow">
+                <Card
+                  key={form.id}
+                  className="hover:shadow-lg transition-shadow"
+                >
                   <CardHeader>
                     <div className="flex justify-between items-start">
                       <div>
@@ -233,7 +238,9 @@ export default function FormList() {
                     <div className="space-y-3">
                       {fieldTypes.length > 0 && (
                         <div className="pt-2">
-                          <p className="text-sm font-medium mb-2">Field Types:</p>
+                          <p className="text-sm font-medium mb-2">
+                            Field Types:
+                          </p>
                           <div className="flex flex-wrap gap-1">
                             {fieldTypes.slice(0, 3).map((type: string) => (
                               <Badge
@@ -256,26 +263,34 @@ export default function FormList() {
                   </CardContent>
 
                   <CardFooter className="flex justify-between border-t pt-4">
-                    <Link to={`/form/submit/${form.id}`}>
-                      <Button
-                        className="cursor-pointer"
-                        size="sm"
-                      >
-                        <LayersPlus className="w-4 h-4 mr-1" />
-                        <span>Data Entry</span>
-                      </Button>
-                    </Link>
+                    <div className="gap-1 flex">
+                      <Link to={`/form/submit/${form.id}`}>
+                        <Button className="cursor-pointer" size="sm">
+                          <LayersPlus className="w-4 h-4 mr-1" />
+                          <span className="md:hidden xl:inline">Data Entry</span>
+                        </Button>
+                      </Link>
+
+                      <Link to={`/form/${form.id}/responses`}>
+                        <Button className="cursor-pointer" size="sm">
+                          <Database className="w-4 h-4 mr-1" />
+                          <span className="md:hidden xl:inline">Responses</span>
+                        </Button>
+                      </Link>
+                    </div>
 
                     <div className="flex gap-2">
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleCopySchema(form.schema, form.title)}
+                        onClick={() =>
+                          handleCopySchema(form.schema, form.title)
+                        }
                         className="cursor-pointer"
                       >
                         <Copy className="w-4 h-4" />
                       </Button>
-                      
+
                       <Button
                         className="cursor-pointer"
                         size="sm"
