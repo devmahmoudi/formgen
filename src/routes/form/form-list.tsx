@@ -233,13 +233,13 @@ export default function FormList() {
                 </CardContent>
                 
                 <CardFooter className="flex justify-between border-t pt-4">
-                  <div className="flex gap-2">
+                  {/* <div className="flex gap-2">
                     <Link to={`/form-generator?edit=${form.id}`}>
                       <Button size="sm" variant="outline" className='cursor-pointer'>
                         <Edit className="w-4 h-4" />
                       </Button>
                     </Link>
-                  </div>
+                  </div> */}
                   
                   <Button
                     className='cursor-pointer'
