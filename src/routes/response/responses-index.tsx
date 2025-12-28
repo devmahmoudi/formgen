@@ -1,15 +1,34 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   ArrowLeft,
   Search,
@@ -22,12 +41,11 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
-  X
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { graphqlService } from "@/services/graphql.service";
 import { supabaseHelpers } from "@/lib/supabase-client";
-
 
 interface FormField {
   id: string;
@@ -57,7 +75,7 @@ interface FilterState {
 export default function ResponsesIndex() {
   const { formId } = useParams<{ formId: string }>();
   const navigate = useNavigate();
-  
+
   const [loading, setLoading] = useState(true);
   const [responses, setResponses] = useState<FormResponse[]>([]);
   const [formTitle, setFormTitle] = useState("");
@@ -65,7 +83,7 @@ export default function ResponsesIndex() {
   const [filters, setFilters] = useState<FilterState>({});
   const [searchTerm, setSearchTerm] = useState("");
   const [showFilters, setShowFilters] = useState(false);
-  
+
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -87,15 +105,15 @@ export default function ResponsesIndex() {
         }
 
         setFormTitle(form.title || "Untitled Form");
-        
+
         // Parse form schema to get fields
         let parsedFields: FormField[] = [];
         try {
           let schema = form.schema;
-          if (typeof schema === 'string') {
+          if (typeof schema === "string") {
             schema = JSON.parse(schema);
           }
-          if (schema && typeof schema === 'object' && 'fields' in schema) {
+          if (schema && typeof schema === "object" && "fields" in schema) {
             parsedFields = schema.fields || [];
           }
         } catch (error) {
@@ -105,16 +123,15 @@ export default function ResponsesIndex() {
 
         // Initialize filters for each field
         const initialFilters: FilterState = {};
-        parsedFields.forEach(field => {
+        parsedFields.forEach((field) => {
           initialFilters[field.id] = {
             operator: supabaseHelpers.getDefaultOperator(field.type),
-            value: '',
+            value: "",
             label: field.label,
-            type: field.type
+            type: field.type,
           };
         });
         setFilters(initialFilters);
-
       } catch (error: any) {
         console.error("Error fetching form:", error);
         toast.error(`Failed to load form: ${error.message}`);
@@ -133,16 +150,21 @@ export default function ResponsesIndex() {
     setLoading(true);
     try {
       // Build filters object
-      const activeFilters: Record<string, { operator: string; value: any }> = {};
-      
+      const activeFilters: Record<string, { operator: string; value: any }> =
+        {};
+
       // Add search term as a filter if present
       if (searchTerm) {
         // Apply search to all text fields
         Object.entries(filters).forEach(([fieldId, filter]) => {
-          if (filter.type === 'text' || filter.type === 'email' || filter.type === 'textarea') {
+          if (
+            filter.type === "text" ||
+            filter.type === "email" ||
+            filter.type === "textarea"
+          ) {
             activeFilters[fieldId] = {
-              operator: 'contains',
-              value: searchTerm
+              operator: "contains",
+              value: searchTerm,
             };
           }
         });
@@ -150,12 +172,19 @@ export default function ResponsesIndex() {
 
       // Add specific field filters
       Object.entries(filters).forEach(([fieldId, filter]) => {
-        if (filter.value !== '' && filter.value !== null && filter.value !== undefined) {
+        if (
+          filter.value !== "" &&
+          filter.value !== null &&
+          filter.value !== undefined
+        ) {
           // Don't override search term filters
           if (!activeFilters[fieldId]) {
             activeFilters[fieldId] = {
               operator: filter.operator,
-              value: supabaseHelpers.parseFilterValue(filter.type, filter.value)
+              value: supabaseHelpers.parseFilterValue(
+                filter.type,
+                filter.value
+              ),
             };
           }
         }
@@ -171,7 +200,6 @@ export default function ResponsesIndex() {
 
       setResponses(result.responses);
       setTotalCount(result.total);
-
     } catch (error: any) {
       console.error("Error fetching responses:", error);
       toast.error(`Failed to load responses: ${error.message}`);
@@ -189,33 +217,37 @@ export default function ResponsesIndex() {
     }
   }, [formId, formFields.length, fetchResponses]);
 
-  const handleFilterChange = (fieldId: string, value: string, operator?: string) => {
-    setFilters(prev => ({
+  const handleFilterChange = (
+    fieldId: string,
+    value: string,
+    operator?: string
+  ) => {
+    setFilters((prev) => ({
       ...prev,
       [fieldId]: {
         ...prev[fieldId],
         value: value,
-        operator: operator || prev[fieldId].operator
-      }
+        operator: operator || prev[fieldId].operator,
+      },
     }));
   };
 
   const handleOperatorChange = (fieldId: string, operator: string) => {
-    setFilters(prev => ({
+    setFilters((prev) => ({
       ...prev,
       [fieldId]: {
         ...prev[fieldId],
-        operator
-      }
+        operator,
+      },
     }));
   };
 
   const clearFilters = () => {
     const clearedFilters: FilterState = {};
-    Object.keys(filters).forEach(fieldId => {
+    Object.keys(filters).forEach((fieldId) => {
       clearedFilters[fieldId] = {
         ...filters[fieldId],
-        value: ''
+        value: "",
       };
     });
     setFilters(clearedFilters);
@@ -231,17 +263,25 @@ export default function ResponsesIndex() {
 
     try {
       // Create CSV header
-      const headers = ['Submission Date', ...formFields.map(field => field.label), 'Response ID'];
-      
+      const headers = [
+        "Submission Date",
+        ...formFields.map((field) => field.label),
+        "Response ID",
+      ];
+
       // Create CSV rows
-      const rows = responses.map(response => {
+      const rows = responses.map((response) => {
         const date = new Date(response.created_at).toLocaleString();
-        const fieldValues = formFields.map(field => {
+        const fieldValues = formFields.map((field) => {
           const value = response.data[field.id];
-          if (value === null || value === undefined) return '';
+          if (value === null || value === undefined) return "";
           const stringValue = String(value);
           // Escape quotes and wrap in quotes if contains comma or newline
-          if (stringValue.includes(',') || stringValue.includes('\n') || stringValue.includes('"')) {
+          if (
+            stringValue.includes(",") ||
+            stringValue.includes("\n") ||
+            stringValue.includes('"')
+          ) {
             return `"${stringValue.replace(/"/g, '""')}"`;
           }
           return stringValue;
@@ -251,16 +291,19 @@ export default function ResponsesIndex() {
 
       // Combine header and rows
       const csvContent = [
-        headers.join(','),
-        ...rows.map(row => row.join(','))
-      ].join('\n');
+        headers.join(","),
+        ...rows.map((row) => row.join(",")),
+      ].join("\n");
 
       // Create download link
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
+      const link = document.createElement("a");
       link.href = url;
-      link.setAttribute('download', `${formTitle.replace(/[^a-z0-9]/gi, '_')}_responses.csv`);
+      link.setAttribute(
+        "download",
+        `${formTitle.replace(/[^a-z0-9]/gi, "_")}_responses.csv`
+      );
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -274,41 +317,43 @@ export default function ResponsesIndex() {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
-  const getOperatorOptions = (fieldType: string) => {
+  const getOperatorOptions = (
+    fieldType: string
+  ): Array<{ value: string; label: string }> => {
     switch (fieldType) {
-      case 'text':
-      case 'email':
-      case 'textarea':
+      case "text":
+      case "email":
+      case "textarea":
         return [
-          { value: 'contains', label: 'Contains' },
-          { value: 'equals', label: 'Equals' },
-          { value: 'startsWith', label: 'Starts with' },
-          { value: 'endsWith', label: 'Ends with' }
+          { value: "contains", label: "Contains" },
+          { value: "equals", label: "Equals" },
+          { value: "startsWith", label: "Starts with" },
+          { value: "endsWith", label: "Ends with" },
         ];
-      case 'number':
+      case "number":
         return [
-          { value: 'equals', label: 'Equals' },
-          { value: 'greaterThan', label: 'Greater than' },
-          { value: 'lessThan', label: 'Less than' },
-          { value: 'greaterThanOrEqual', label: '≥' },
-          { value: 'lessThanOrEqual', label: '≤' }
+          { value: "equals", label: "Equals" },
+          { value: "greaterThan", label: "Greater than" },
+          { value: "lessThan", label: "Less than" },
+          { value: "greaterThanOrEqual", label: "≥" },
+          { value: "lessThanOrEqual", label: "≤" },
         ];
-      case 'checkbox':
+      case "checkbox":
         return [
-          { value: 'isTrue', label: 'Is checked' },
-          { value: 'isFalse', label: 'Is not checked' }
+          { value: "isTrue", label: "Is checked" },
+          { value: "isFalse", label: "Is not checked" },
         ];
       default:
-        return [{ value: 'equals', label: 'Equals' }];
+        return [{ value: "equals", label: "Equals" }];
     }
   };
 
@@ -316,7 +361,7 @@ export default function ResponsesIndex() {
     const filter = filters[field.id];
 
     switch (field.type) {
-      case 'checkbox':
+      case "checkbox":
         return (
           <Select
             value={filter.value}
@@ -333,7 +378,7 @@ export default function ResponsesIndex() {
           </Select>
         );
 
-      case 'number':
+      case "number":
         return (
           <div className="flex gap-2">
             <Select
@@ -341,9 +386,16 @@ export default function ResponsesIndex() {
               onValueChange={(value) => handleOperatorChange(field.id, value)}
               className="w-24"
             >
-              {getOperatorOptions(field.type).map(op => (
-                <SelectItem key={op.value} value={op.value}>{op.label}</SelectItem>
-              ))}
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {getOperatorOptions(field.type).map((op) => (
+                  <SelectItem key={op.value} value={op.value}>
+                    {op.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
             <Input
               type="number"
@@ -355,9 +407,9 @@ export default function ResponsesIndex() {
           </div>
         );
 
-      case 'text':
-      case 'email':
-      case 'textarea':
+      case "text":
+      case "email":
+      case "textarea":
         return (
           <div className="flex gap-2">
             <Select
@@ -365,9 +417,16 @@ export default function ResponsesIndex() {
               onValueChange={(value) => handleOperatorChange(field.id, value)}
               className="w-32"
             >
-              {getOperatorOptions(field.type).map(op => (
-                <SelectItem key={op.value} value={op.value}>{op.label}</SelectItem>
-              ))}
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {getOperatorOptions(field.type).map((op) => (
+                  <SelectItem key={op.value} value={op.value}>
+                    {op.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
             <Input
               placeholder={`Filter ${field.label.toLowerCase()}...`}
@@ -397,7 +456,7 @@ export default function ResponsesIndex() {
             <Skeleton className="h-10 w-10 rounded" />
             <Skeleton className="h-8 w-48" />
           </div>
-          
+
           <Card>
             <CardHeader>
               <Skeleton className="h-6 w-32" />
@@ -433,7 +492,7 @@ export default function ResponsesIndex() {
                   <Calendar className="w-3 h-3" />
                   {totalCount} total responses
                 </Badge>
-                {Object.values(filters).some(f => f.value) && (
+                {Object.values(filters).some((f) => f.value) && (
                   <Badge variant="secondary" className="gap-1">
                     <Filter className="w-3 h-3" />
                     {responses.length} showing
@@ -442,12 +501,9 @@ export default function ResponsesIndex() {
               </div>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={fetchResponses}
-            >
+            <Button variant="outline" onClick={fetchResponses}>
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
             </Button>
@@ -488,12 +544,9 @@ export default function ResponsesIndex() {
                     <Filter className="w-4 h-4 mr-2" />
                     {showFilters ? "Hide Filters" : "Show Filters"}
                   </Button>
-                  {(searchTerm || Object.values(filters).some(f => f.value)) && (
-                    <Button
-                      variant="ghost"
-                      onClick={clearFilters}
-                      size="icon"
-                    >
+                  {(searchTerm ||
+                    Object.values(filters).some((f) => f.value)) && (
+                    <Button variant="ghost" onClick={clearFilters} size="icon">
                       <X className="w-4 h-4" />
                     </Button>
                   )}
@@ -507,7 +560,10 @@ export default function ResponsesIndex() {
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {formFields.map((field) => (
                       <div key={field.id} className="space-y-2">
-                        <Label htmlFor={`filter-${field.id}`} className="text-sm">
+                        <Label
+                          htmlFor={`filter-${field.id}`}
+                          className="text-sm"
+                        >
                           {field.label}
                         </Label>
                         {renderFilterInput(field)}
@@ -527,19 +583,19 @@ export default function ResponsesIndex() {
               <div>
                 <CardTitle>Responses</CardTitle>
                 <CardDescription>
-                  {responses.length === 0 ? (
-                    "No responses found"
-                  ) : (
-                    `Showing ${responses.length} of ${totalCount} responses`
-                  )}
+                  {responses.length === 0
+                    ? "No responses found"
+                    : `Showing ${responses.length} of ${totalCount} responses`}
                 </CardDescription>
               </div>
-              
+
               {/* Pagination Controls */}
               {totalCount > 0 && (
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">Rows per page:</span>
+                    <span className="text-sm text-muted-foreground">
+                      Rows per page:
+                    </span>
                     <Select
                       value={pageSize.toString()}
                       onValueChange={(value) => {
@@ -551,7 +607,7 @@ export default function ResponsesIndex() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {pageSizes.map(size => (
+                        {pageSizes.map((size) => (
                           <SelectItem key={size} value={size.toString()}>
                             {size}
                           </SelectItem>
@@ -559,7 +615,7 @@ export default function ResponsesIndex() {
                       </SelectContent>
                     </Select>
                   </div>
-                  
+
                   <div className="flex items-center gap-1">
                     <Button
                       variant="outline"
@@ -572,20 +628,26 @@ export default function ResponsesIndex() {
                     <Button
                       variant="outline"
                       size="icon"
-                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      onClick={() =>
+                        setCurrentPage((prev) => Math.max(1, prev - 1))
+                      }
                       disabled={currentPage === 1}
                     >
                       <ChevronLeft className="w-4 h-4" />
                     </Button>
-                    
+
                     <span className="px-3 text-sm">
                       Page {currentPage} of {Math.ceil(totalCount / pageSize)}
                     </span>
-                    
+
                     <Button
                       variant="outline"
                       size="icon"
-                      onClick={() => setCurrentPage(prev => Math.min(Math.ceil(totalCount / pageSize), prev + 1))}
+                      onClick={() =>
+                        setCurrentPage((prev) =>
+                          Math.min(Math.ceil(totalCount / pageSize), prev + 1)
+                        )
+                      }
                       disabled={currentPage >= Math.ceil(totalCount / pageSize)}
                     >
                       <ChevronRight className="w-4 h-4" />
@@ -593,7 +655,9 @@ export default function ResponsesIndex() {
                     <Button
                       variant="outline"
                       size="icon"
-                      onClick={() => setCurrentPage(Math.ceil(totalCount / pageSize))}
+                      onClick={() =>
+                        setCurrentPage(Math.ceil(totalCount / pageSize))
+                      }
                       disabled={currentPage >= Math.ceil(totalCount / pageSize)}
                     >
                       <ChevronsRight className="w-4 h-4" />
@@ -603,16 +667,20 @@ export default function ResponsesIndex() {
               )}
             </div>
           </CardHeader>
-          
+
           <CardContent>
             {responses.length === 0 ? (
               <div className="text-center py-12">
                 <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No responses found</h3>
+                <h3 className="text-lg font-semibold mb-2">
+                  No responses found
+                </h3>
                 <p className="text-muted-foreground mb-4">
-                  {loading ? "Loading responses..." : "No responses match your current filters."}
+                  {loading
+                    ? "Loading responses..."
+                    : "No responses match your current filters."}
                 </p>
-                {!loading && Object.values(filters).some(f => f.value) && (
+                {!loading && Object.values(filters).some((f) => f.value) && (
                   <Button variant="outline" onClick={clearFilters}>
                     Clear filters
                   </Button>
@@ -638,15 +706,15 @@ export default function ResponsesIndex() {
                         </TableCell>
                         {formFields.map((field) => {
                           const value = response.data[field.id];
-                          let displayValue = '';
-                          
+                          let displayValue = "";
+
                           if (value === null || value === undefined) {
-                            displayValue = '-';
-                          } else if (field.type === 'checkbox') {
-                            displayValue = value ? '✓ Yes' : '✗ No';
-                          } else if (field.type === 'email') {
+                            displayValue = "-";
+                          } else if (field.type === "checkbox") {
+                            displayValue = value ? "✓ Yes" : "✗ No";
+                          } else if (field.type === "email") {
                             displayValue = (
-                              <a 
+                              <a
                                 href={`mailto:${value}`}
                                 className="text-primary hover:underline"
                               >
@@ -686,7 +754,10 @@ export default function ResponsesIndex() {
 
         {/* Info Footer */}
         <div className="text-center text-sm text-muted-foreground">
-          <p>Data is queried directly from Supabase with JSON filtering • Server-side pagination</p>
+          <p>
+            Data is queried directly from Supabase with JSON filtering •
+            Server-side pagination
+          </p>
         </div>
       </div>
     </div>
