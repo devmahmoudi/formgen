@@ -15,9 +15,8 @@ export default function Navbar() {
 
   const navItems = [
     { label: "Home", href: "/" },
+    { label: "Forms", href: "/form" },
     // { label: "Form Renderer", href: "/form/renderer" },
-    { label: "Form Generator", href: "/form/generator" },
-    { label: "Forms List", href: "/form" },
     // { label: "About", href: "/about" },
     // { label: "Services", href: "/services" },
     // { label: "Contact", href: "/contact" },
