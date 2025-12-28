@@ -7,6 +7,7 @@ import ContactPage from "./routes/contact";
 import NotFoundPage from "./routes/not-found";
 import FormGenerator from "./routes/form/form-generator";
 import FormRenderer from "./routes/form/form-renderer";
+import FormList from "./routes/form/form-list";
 
 export const router = createBrowserRouter([
   {
@@ -46,6 +47,11 @@ export const router = createBrowserRouter([
       {
         path: "renderer",
         element: <FormRenderer/>
+      },
+      {
+        index: true,
+        path: "",
+        element: <FormList/>
       }
     ]
   }
