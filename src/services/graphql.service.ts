@@ -1,4 +1,5 @@
 import { graphqlDirect } from '@/lib/supabase-client';
+import { supabase, supabaseHelpers } from '@/lib/supabase-client';
 
 export interface GraphQLResponse<T = any> {
   data?: T;
@@ -35,7 +36,7 @@ export class GraphQLService {
     }
   }
 
-  // Form-specific queries
+  // Form-specific queries using GraphQL
   async getForms() {
     const query = `
       query GetForms {
@@ -154,6 +155,104 @@ export class GraphQLService {
 
     const result = await this.mutate<{ deleteFromformsCollection: any }>(mutation, { id });
     return result.deleteFromformsCollection?.records?.[0] || null;
+  }
+
+  // New: Supabase direct queries for better JSON filtering
+  async getFormResponsesWithFilters(
+    formId: string, 
+    filters: Record<string, { operator: string; value: any }>,
+    page: number = 1,
+    pageSize: number = 10
+  ) {
+    try {
+      let query = supabase
+        .from('responses')
+        .select('*', { count: 'exact' })
+        .eq('form_id', formId)
+        .order('created_at', { ascending: false });
+
+      // Apply JSON filters
+      Object.entries(filters).forEach(([fieldName, filter]) => {
+        if (filter.value !== '' && filter.value !== null && filter.value !== undefined) {
+          // For text fields, use ilike for case-insensitive search
+          if (filter.operator === 'contains') {
+            query = query.filter(`data->>${fieldName}`, 'ilike', `%${filter.value}%`);
+          } 
+          // For exact matches (numbers, booleans)
+          else if (filter.operator === 'equals') {
+            query = query.filter(`data->${fieldName}`, 'eq', filter.value);
+          }
+          // For boolean checks
+          else if (filter.operator === 'isTrue') {
+            query = query.filter(`data->${fieldName}`, 'eq', true);
+          }
+          else if (filter.operator === 'isFalse') {
+            query = query.filter(`data->${fieldName}`, 'eq', false);
+          }
+          // For number comparisons
+          else if (filter.operator === 'greaterThan') {
+            query = query.filter(`data->${fieldName}`, 'gt', filter.value);
+          }
+          else if (filter.operator === 'lessThan') {
+            query = query.filter(`data->${fieldName}`, 'lt', filter.value);
+          }
+          // For starts with
+          else if (filter.operator === 'startsWith') {
+            query = query.filter(`data->>${fieldName}`, 'ilike', `${filter.value}%`);
+          }
+          // For ends with
+          else if (filter.operator === 'endsWith') {
+            query = query.filter(`data->>${fieldName}`, 'ilike', `%${filter.value}`);
+          }
+          // For greater than or equal
+          else if (filter.operator === 'greaterThanOrEqual') {
+            query = query.filter(`data->${fieldName}`, 'gte', filter.value);
+          }
+          // For less than or equal
+          else if (filter.operator === 'lessThanOrEqual') {
+            query = query.filter(`data->${fieldName}`, 'lte', filter.value);
+          }
+        }
+      });
+
+      // Apply pagination
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      query = query.range(from, to);
+
+      const { data, error, count } = await query;
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      return {
+        responses: data || [],
+        total: count || 0,
+        page,
+        pageSize,
+        totalPages: Math.ceil((count || 0) / pageSize)
+      };
+
+    } catch (error: any) {
+      console.error('Error fetching responses:', error);
+      throw error;
+    }
+  }
+
+  // Backward compatibility method
+  async getFormResponses(formId: string) {
+    const { data, error } = await supabase
+      .from('responses')
+      .select('*')
+      .eq('form_id', formId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data || [];
   }
 }
 
