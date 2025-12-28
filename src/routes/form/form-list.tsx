@@ -172,8 +172,8 @@ export default function FormList() {
               <p className="text-muted-foreground mb-6">
                 Create your first form to get started
               </p>
-              <Link to="/form-generator">
-                <Button>
+              <Link to="/form/generator">
+                <Button className='cursor-pointer'>
                   <Plus className="w-4 h-4 mr-2" />
                   Create Your First Form
                 </Button>
