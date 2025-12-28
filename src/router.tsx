@@ -6,8 +6,8 @@ import ServicesPage from "./routes/services";
 import ContactPage from "./routes/contact";
 import NotFoundPage from "./routes/not-found";
 import FormGenerator from "./routes/form/form-generator";
-import FormRenderer from "./routes/form/form-renderer";
 import FormList from "./routes/form/form-list";
+import SubmitForm from "./routes/form/submit-form";
 
 export const router = createBrowserRouter([
   {
@@ -44,9 +44,9 @@ export const router = createBrowserRouter([
         path: "generator",
         element: <FormGenerator/>
       },
-      {
-        path: "renderer",
-        element: <FormRenderer/>
+       {
+        path: "submit/:id",
+        element: <SubmitForm/>
       },
       {
         index: true,

@@ -1,34 +1,42 @@
-import { useQuery, useMutation } from '@apollo/client/react';
-import { GET_FORMS, DELETE_FORM } from '@/graphql/queries';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { useQuery, useMutation } from "@apollo/client/react";
+import { GET_FORMS, DELETE_FORM } from "@/graphql/queries";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { 
-  Eye, 
-  Edit, 
-  Trash2, 
-  Copy, 
-  Calendar, 
+import {
+  Eye,
+  Edit,
+  Trash2,
+  Copy,
+  Calendar,
   FileText,
   RefreshCw,
-  Plus
+  Plus,
+  LayersPlus,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
-import type { Form, FormEdge } from '@/types/form';
+import type { Form, FormEdge } from "@/types/form";
 
 export default function FormList() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  
+
   const { loading, error, data, refetch } = useQuery(GET_FORMS);
   const [deleteForm] = useMutation(DELETE_FORM, {
     update(cache, { data: { deleteFromformsCollection } }) {
       if (deleteFromformsCollection?.records?.length > 0) {
         const deletedId = deleteFromformsCollection.records[0].id;
-        
+
         cache.modify({
           fields: {
             formsCollection(existingCollection, { readField }) {
@@ -36,14 +44,14 @@ export default function FormList() {
               return {
                 ...existingCollection,
                 edges: edges.filter(
-                  (edge: FormEdge) => readField('id', edge.node) !== deletedId
-                )
+                  (edge: FormEdge) => readField("id", edge.node) !== deletedId
+                ),
               };
-            }
-          }
+            },
+          },
         });
       }
-    }
+    },
   });
 
   const handleDelete = async (id: string, title: string) => {
@@ -56,8 +64,8 @@ export default function FormList() {
       await deleteForm({ variables: { id } });
       toast.success(`Form "${title}" deleted successfully`);
     } catch (err: any) {
-      toast.error('Failed to delete form');
-      console.error('Delete error:', err);
+      toast.error("Failed to delete form");
+      console.error("Delete error:", err);
     } finally {
       setDeletingId(null);
     }
@@ -69,12 +77,12 @@ export default function FormList() {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
@@ -93,7 +101,7 @@ export default function FormList() {
             </div>
             <Skeleton className="h-10 w-32" />
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[1, 2, 3].map((i) => (
               <Card key={i}>
@@ -123,11 +131,7 @@ export default function FormList() {
             Error loading forms: {error.message}
           </AlertDescription>
         </Alert>
-        <Button 
-          onClick={() => refetch()} 
-          variant="outline" 
-          className="mt-4"
-        >
+        <Button onClick={() => refetch()} variant="outline" className="mt-4">
           <RefreshCw className="w-4 h-4 mr-2" />
           Retry
         </Button>
@@ -135,7 +139,8 @@ export default function FormList() {
     );
   }
 
-  const forms = data?.formsCollection?.edges?.map((edge: FormEdge) => edge.node) || [];
+  const forms =
+    data?.formsCollection?.edges?.map((edge: FormEdge) => edge.node) || [];
 
   return (
     <div className="container mx-auto p-6">
@@ -148,14 +153,14 @@ export default function FormList() {
               Create, manage, and view all your form schemas
             </p>
           </div>
-          
+
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => refetch()}>
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
             </Button>
             <Link to="/form/generator">
-              <Button className='cursor-pointer'>
+              <Button className="cursor-pointer">
                 <Plus className="w-4 h-4 mr-2" />
                 Create Form
               </Button>
@@ -173,7 +178,7 @@ export default function FormList() {
                 Create your first form to get started
               </p>
               <Link to="/form/generator">
-                <Button className='cursor-pointer'>
+                <Button className="cursor-pointer">
                   <Plus className="w-4 h-4 mr-2" />
                   Create Your First Form
                 </Button>
@@ -201,26 +206,26 @@ export default function FormList() {
                     </Badge>
                   </div>
                 </CardHeader>
-                
+
                 <CardContent>
                   <div className="space-y-3">
-
-                    
                     {form.schema?.fields && (
                       <div className="pt-2">
                         <p className="text-sm font-medium mb-2">Field Types:</p>
                         <div className="flex flex-wrap gap-1">
                           {Array.from(
                             new Set(form.schema.fields.map((f: any) => f.type))
-                          ).slice(0, 3).map((type: string) => (
-                            <Badge 
-                              key={type as string} 
-                              variant="secondary" 
-                              className="text-xs"
-                            >
-                              {type}
-                            </Badge>
-                          ))}
+                          )
+                            .slice(0, 3)
+                            .map((type: string) => (
+                              <Badge
+                                key={type as string}
+                                variant="secondary"
+                                className="text-xs"
+                              >
+                                {type}
+                              </Badge>
+                            ))}
                           {form.schema.fields.length > 3 && (
                             <Badge variant="secondary" className="text-xs">
                               +{form.schema.fields.length - 3} more
@@ -231,7 +236,7 @@ export default function FormList() {
                     )}
                   </div>
                 </CardContent>
-                
+
                 <CardFooter className="flex justify-between border-t pt-4">
                   {/* <div className="flex gap-2">
                     <Link to={`/form-generator?edit=${form.id}`}>
@@ -240,9 +245,18 @@ export default function FormList() {
                       </Button>
                     </Link>
                   </div> */}
-                  
+                  <Link to={`/form/submit/${form.id}`}>
+                    <Button
+                      className="cursor-pointer"
+                      size="sm"
+                    >
+                      <LayersPlus />
+                      <span>Data Entry</span>
+                    </Button>
+                  </Link>
+
                   <Button
-                    className='cursor-pointer'
+                    className="cursor-pointer"
                     size="sm"
                     variant="destructive"
                     onClick={() => handleDelete(form.id, form.title)}
@@ -259,7 +273,6 @@ export default function FormList() {
             ))}
           </div>
         )}
-
       </div>
     </div>
   );
