@@ -235,13 +235,14 @@ export default function FormList() {
                 <CardFooter className="flex justify-between border-t pt-4">
                   <div className="flex gap-2">
                     <Link to={`/form-generator?edit=${form.id}`}>
-                      <Button size="sm" variant="outline">
+                      <Button size="sm" variant="outline" className='cursor-pointer'>
                         <Edit className="w-4 h-4" />
                       </Button>
                     </Link>
                   </div>
                   
                   <Button
+                    className='cursor-pointer'
                     size="sm"
                     variant="destructive"
                     onClick={() => handleDelete(form.id, form.title)}
