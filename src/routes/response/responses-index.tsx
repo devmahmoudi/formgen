@@ -1,13 +1,32 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,7 +51,7 @@ import {
   ChevronsRight,
   Trash2,
   X,
-  AlertTriangle
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { graphqlService } from "@/services/graphql.service";
@@ -65,7 +84,7 @@ interface FilterState {
 export default function ResponsesIndex() {
   const { formId } = useParams<{ formId: string }>();
   const navigate = useNavigate();
-  
+
   const [loading, setLoading] = useState(true);
   const [responses, setResponses] = useState<FormResponse[]>([]);
   const [formTitle, setFormTitle] = useState("");
@@ -73,7 +92,7 @@ export default function ResponsesIndex() {
   const [filters, setFilters] = useState<FilterState>({});
   const [searchTerm, setSearchTerm] = useState("");
   const [showFilters, setShowFilters] = useState(false);
-  
+
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -83,19 +102,26 @@ export default function ResponsesIndex() {
   // Delete state
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [responseToDelete, setResponseToDelete] = useState<{id: string, identifier: string} | null>(null);
+  const [responseToDelete, setResponseToDelete] = useState<{
+    id: string;
+    identifier: string;
+  } | null>(null);
 
   // Get implicit operator based on field type
   const getImplicitOperator = (fieldType: string): string => {
     switch (fieldType) {
-      case 'text':
-      case 'email':
-      case 'textarea':
-        return 'contains'; // Text fields use "contains" for partial matching
-      case 'checkbox':
-        return 'isTrue';   // Checkboxes use "isTrue" for filtering
+      case "text":
+      case "email":
+      case "textarea":
+        return "contains"; // Text fields use "contains" for partial matching
+      case "checkbox":
+        return "isTrue"; // Checkboxes use "isTrue" for filtering
+      case "select":
+      case "radio":
+      case "dropdown":
+        return "equals"; // Selection fields use exact matching
       default:
-        return 'equals';   // All other fields use exact matching
+        return "equals"; // All other fields use exact matching
     }
   };
 
@@ -114,15 +140,15 @@ export default function ResponsesIndex() {
         }
 
         setFormTitle(form.title || "Untitled Form");
-        
+
         // Parse form schema to get fields
         let parsedFields: FormField[] = [];
         try {
           let schema = form.schema;
-          if (typeof schema === 'string') {
+          if (typeof schema === "string") {
             schema = JSON.parse(schema);
           }
-          if (schema && typeof schema === 'object' && 'fields' in schema) {
+          if (schema && typeof schema === "object" && "fields" in schema) {
             parsedFields = schema.fields || [];
           }
         } catch (error) {
@@ -132,15 +158,14 @@ export default function ResponsesIndex() {
 
         // Initialize filters for each field
         const initialFilters: FilterState = {};
-        parsedFields.forEach(field => {
+        parsedFields.forEach((field) => {
           initialFilters[field.id] = {
-            value: '',
+            value: "",
             label: field.label,
-            type: field.type
+            type: field.type,
           };
         });
         setFilters(initialFilters);
-
       } catch (error: any) {
         console.error("Error fetching form:", error);
         toast.error(`Failed to load form: ${error.message}`);
@@ -159,16 +184,21 @@ export default function ResponsesIndex() {
     setLoading(true);
     try {
       // Build filters object with implicit operators
-      const activeFilters: Record<string, { operator: string; value: any }> = {};
-      
+      const activeFilters: Record<string, { operator: string; value: any }> =
+        {};
+
       // Add search term as a filter if present
       if (searchTerm.trim()) {
         // Apply search to all text fields with 'contains' operator
         Object.entries(filters).forEach(([fieldId, filter]) => {
-          if (filter.type === 'text' || filter.type === 'email' || filter.type === 'textarea') {
+          if (
+            filter.type === "text" ||
+            filter.type === "email" ||
+            filter.type === "textarea"
+          ) {
             activeFilters[fieldId] = {
-              operator: 'contains',
-              value: searchTerm.trim()
+              operator: "contains",
+              value: searchTerm.trim(),
             };
           }
         });
@@ -176,17 +206,48 @@ export default function ResponsesIndex() {
 
       // Add specific field filters with implicit operators
       Object.entries(filters).forEach(([fieldId, filter]) => {
-        if (filter.value !== '' && filter.value !== null && filter.value !== undefined && filter.value !== false) {
-          // Don't override search term filters for text fields
-          if (!activeFilters[fieldId] || filter.type !== 'text') {
-            const operator = getImplicitOperator(filter.type);
-            activeFilters[fieldId] = {
-              operator,
-              value: filter.value
-            };
+        // Skip if value is empty, null, undefined, or the special __all__ placeholder
+        if (
+          !filter.value ||
+          filter.value === "" ||
+          filter.value === "__all__"
+        ) {
+          return;
+        }
+
+        // Don't override search term filters for text fields
+        if (!activeFilters[fieldId] || filter.type !== "text") {
+          let operator = getImplicitOperator(filter.type);
+          let value = filter.value;
+
+          // Special handling for checkbox values
+          if (filter.type === "checkbox") {
+            if (filter.value === "true") {
+              value = true;
+              operator = "isTrue";
+            } else if (filter.value === "false") {
+              value = false;
+              operator = "isFalse";
+            }
           }
+
+          // For select/radio/dropdown, always use 'equals' operator for exact matching
+          if (
+            filter.type === "select" ||
+            filter.type === "radio" ||
+            filter.type === "dropdown"
+          ) {
+            operator = "equals";
+          }
+
+          activeFilters[fieldId] = {
+            operator,
+            value: value,
+          };
         }
       });
+
+      console.log("Active filters:", activeFilters); // Debug log
 
       // Fetch from Supabase with filters and pagination
       const result = await graphqlService.getFormResponsesWithFilters(
@@ -198,7 +259,6 @@ export default function ResponsesIndex() {
 
       setResponses(result.responses);
       setTotalCount(result.total);
-
     } catch (error: any) {
       console.error("Error fetching responses:", error);
       toast.error(`Failed to load responses: ${error.message}`);
@@ -217,12 +277,14 @@ export default function ResponsesIndex() {
   }, [formId, formFields.length, fetchResponses]);
 
   const handleFilterChange = (fieldId: string, value: any) => {
-    setFilters(prev => ({
+    // If value is the special "__all__" placeholder, set it to empty string
+    const actualValue = value === "__all__" ? "" : value;
+    setFilters((prev) => ({
       ...prev,
       [fieldId]: {
         ...prev[fieldId],
-        value: value
-      }
+        value: actualValue,
+      },
     }));
     // Reset to first page when filter changes
     setCurrentPage(1);
@@ -230,10 +292,10 @@ export default function ResponsesIndex() {
 
   const clearFilters = () => {
     const clearedFilters: FilterState = {};
-    Object.keys(filters).forEach(fieldId => {
+    Object.keys(filters).forEach((fieldId) => {
       clearedFilters[fieldId] = {
         ...filters[fieldId],
-        value: ''
+        value: "",
       };
     });
     setFilters(clearedFilters);
@@ -246,13 +308,13 @@ export default function ResponsesIndex() {
     const filter = filters[field.id];
 
     switch (field.type) {
-      case 'checkbox':
+      case "checkbox":
         return (
           <Select
-            value={filter.value?.toString() || ''}
+            value={filter.value?.toString() || ""}
             onValueChange={(value) => handleFilterChange(field.id, value)}
           >
-            <SelectTrigger>
+            <SelectTrigger className="w-full">
               <SelectValue placeholder="All" />
             </SelectTrigger>
             <SelectContent>
@@ -263,53 +325,56 @@ export default function ResponsesIndex() {
           </Select>
         );
 
-      case 'select':
-      case 'radio':
-      case 'dropdown':
+      case "select":
+      case "radio":
+      case "dropdown":
         return (
           <Select
-            value={filter.value || ''}
+            value={filter.value || ""}
             onValueChange={(value) => handleFilterChange(field.id, value)}
           >
-            <SelectTrigger>
+            <SelectTrigger className="w-full">
               <SelectValue placeholder="All" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All</SelectItem>
+              {/* Fix: Use a placeholder item with a non-empty value */}
+              <SelectItem value="__all__">All</SelectItem>
               {field.options?.map((option) => (
-                <SelectItem key={option} value={option}>{option}</SelectItem>
+                <SelectItem key={option} value={option}>
+                  {option}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
         );
 
-      case 'number':
+      case "number":
         return (
           <Input
             type="number"
             placeholder={`Filter ${field.label.toLowerCase()}...`}
-            value={filter.value || ''}
+            value={filter.value || ""}
             onChange={(e) => handleFilterChange(field.id, e.target.value)}
           />
         );
 
-      case 'date':
+      case "date":
         return (
           <Input
             type="date"
             placeholder={`Filter ${field.label.toLowerCase()}...`}
-            value={filter.value || ''}
+            value={filter.value || ""}
             onChange={(e) => handleFilterChange(field.id, e.target.value)}
           />
         );
 
-      case 'text':
-      case 'email':
-      case 'textarea':
+      case "text":
+      case "email":
+      case "textarea":
         return (
           <Input
             placeholder={`Search in ${field.label.toLowerCase()}...`}
-            value={filter.value || ''}
+            value={filter.value || ""}
             onChange={(e) => handleFilterChange(field.id, e.target.value)}
           />
         );
@@ -318,7 +383,7 @@ export default function ResponsesIndex() {
         return (
           <Input
             placeholder={`Filter ${field.label.toLowerCase()}...`}
-            value={filter.value || ''}
+            value={filter.value || ""}
             onChange={(e) => handleFilterChange(field.id, e.target.value)}
           />
         );
@@ -333,7 +398,9 @@ export default function ResponsesIndex() {
       const firstField = Object.values(data)[0];
       if (firstField && String(firstField).trim()) {
         const fieldValue = String(firstField);
-        identifier = `response "${fieldValue.substring(0, 30)}${fieldValue.length > 30 ? '...' : ''}"`;
+        identifier = `response "${fieldValue.substring(0, 30)}${
+          fieldValue.length > 30 ? "..." : ""
+        }"`;
       }
     } catch (error) {
       console.error("Error parsing response data:", error);
@@ -349,13 +416,14 @@ export default function ResponsesIndex() {
     setDeletingId(responseToDelete.id);
     try {
       await graphqlService.deleteResponse(responseToDelete.id);
-      
+
       // Remove from local state
-      setResponses(prev => prev.filter(response => response.id !== responseToDelete.id));
-      setTotalCount(prev => prev - 1);
-      
+      setResponses((prev) =>
+        prev.filter((response) => response.id !== responseToDelete.id)
+      );
+      setTotalCount((prev) => prev - 1);
+
       toast.success("Response deleted successfully");
-      
     } catch (error: any) {
       console.error("Delete error:", error);
       toast.error(`Failed to delete response: ${error.message}`);
@@ -374,17 +442,25 @@ export default function ResponsesIndex() {
 
     try {
       // Create CSV header
-      const headers = ['Submission Date', ...formFields.map(field => field.label), 'Response ID'];
-      
+      const headers = [
+        "Submission Date",
+        ...formFields.map((field) => field.label),
+        "Response ID",
+      ];
+
       // Create CSV rows
-      const rows = responses.map(response => {
+      const rows = responses.map((response) => {
         const date = new Date(response.created_at).toLocaleString();
-        const fieldValues = formFields.map(field => {
+        const fieldValues = formFields.map((field) => {
           const value = response.data[field.id];
-          if (value === null || value === undefined) return '';
+          if (value === null || value === undefined) return "";
           const stringValue = String(value);
           // Escape quotes and wrap in quotes if contains comma or newline
-          if (stringValue.includes(',') || stringValue.includes('\n') || stringValue.includes('"')) {
+          if (
+            stringValue.includes(",") ||
+            stringValue.includes("\n") ||
+            stringValue.includes('"')
+          ) {
             return `"${stringValue.replace(/"/g, '""')}"`;
           }
           return stringValue;
@@ -394,16 +470,19 @@ export default function ResponsesIndex() {
 
       // Combine header and rows
       const csvContent = [
-        headers.join(','),
-        ...rows.map(row => row.join(','))
-      ].join('\n');
+        headers.join(","),
+        ...rows.map((row) => row.join(",")),
+      ].join("\n");
 
       // Create download link
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
+      const link = document.createElement("a");
       link.href = url;
-      link.setAttribute('download', `${formTitle.replace(/[^a-z0-9]/gi, '_')}_responses.csv`);
+      link.setAttribute(
+        "download",
+        `${formTitle.replace(/[^a-z0-9]/gi, "_")}_responses.csv`
+      );
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -417,12 +496,12 @@ export default function ResponsesIndex() {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
@@ -444,7 +523,7 @@ export default function ResponsesIndex() {
           >
             <Eye className="w-3.5 h-3.5" />
           </Button>
-          
+
           <Button
             variant="ghost"
             size="icon"
@@ -472,7 +551,7 @@ export default function ResponsesIndex() {
             <Skeleton className="h-10 w-10 rounded" />
             <Skeleton className="h-8 w-48" />
           </div>
-          
+
           <Card>
             <CardHeader>
               <Skeleton className="h-6 w-32" />
@@ -508,7 +587,7 @@ export default function ResponsesIndex() {
                   <Calendar className="w-3 h-3" />
                   {totalCount} total responses
                 </Badge>
-                {Object.values(filters).some(f => f.value) && (
+                {Object.values(filters).some((f) => f.value) && (
                   <Badge variant="secondary" className="gap-1">
                     <Filter className="w-3 h-3" />
                     {responses.length} showing
@@ -517,12 +596,9 @@ export default function ResponsesIndex() {
               </div>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={fetchResponses}
-            >
+            <Button variant="outline" onClick={fetchResponses}>
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
             </Button>
@@ -563,12 +639,9 @@ export default function ResponsesIndex() {
                     <Filter className="w-4 h-4 mr-2" />
                     {showFilters ? "Hide Filters" : "Show Filters"}
                   </Button>
-                  {(searchTerm || Object.values(filters).some(f => f.value)) && (
-                    <Button
-                      variant="ghost"
-                      onClick={clearFilters}
-                      size="icon"
-                    >
+                  {(searchTerm ||
+                    Object.values(filters).some((f) => f.value)) && (
+                    <Button variant="ghost" onClick={clearFilters} size="icon">
                       <X className="w-4 h-4" />
                     </Button>
                   )}
@@ -582,7 +655,10 @@ export default function ResponsesIndex() {
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {formFields.map((field) => (
                       <div key={field.id} className="space-y-2">
-                        <Label htmlFor={`filter-${field.id}`} className="text-sm">
+                        <Label
+                          htmlFor={`filter-${field.id}`}
+                          className="text-sm"
+                        >
                           {field.label}
                           <span className="text-xs text-muted-foreground ml-2">
                             ({field.type})
@@ -605,19 +681,19 @@ export default function ResponsesIndex() {
               <div>
                 <CardTitle>Responses</CardTitle>
                 <CardDescription>
-                  {responses.length === 0 ? (
-                    "No responses found"
-                  ) : (
-                    `Showing ${responses.length} of ${totalCount} responses`
-                  )}
+                  {responses.length === 0
+                    ? "No responses found"
+                    : `Showing ${responses.length} of ${totalCount} responses`}
                 </CardDescription>
               </div>
-              
+
               {/* Pagination Controls */}
               {totalCount > 0 && (
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm text-muted-foreground">Rows per page:</span>
+                    <span className="text-sm text-muted-foreground">
+                      Rows per page:
+                    </span>
                     <Select
                       value={pageSize.toString()}
                       onValueChange={(value) => {
@@ -629,7 +705,7 @@ export default function ResponsesIndex() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {pageSizes.map(size => (
+                        {pageSizes.map((size) => (
                           <SelectItem key={size} value={size.toString()}>
                             {size}
                           </SelectItem>
@@ -637,7 +713,7 @@ export default function ResponsesIndex() {
                       </SelectContent>
                     </Select>
                   </div>
-                  
+
                   <div className="flex items-center gap-1">
                     <Button
                       variant="outline"
@@ -650,20 +726,26 @@ export default function ResponsesIndex() {
                     <Button
                       variant="outline"
                       size="icon"
-                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      onClick={() =>
+                        setCurrentPage((prev) => Math.max(1, prev - 1))
+                      }
                       disabled={currentPage === 1}
                     >
                       <ChevronLeft className="w-4 h-4" />
                     </Button>
-                    
+
                     <span className="px-3 text-sm">
                       Page {currentPage} of {Math.ceil(totalCount / pageSize)}
                     </span>
-                    
+
                     <Button
                       variant="outline"
                       size="icon"
-                      onClick={() => setCurrentPage(prev => Math.min(Math.ceil(totalCount / pageSize), prev + 1))}
+                      onClick={() =>
+                        setCurrentPage((prev) =>
+                          Math.min(Math.ceil(totalCount / pageSize), prev + 1)
+                        )
+                      }
                       disabled={currentPage >= Math.ceil(totalCount / pageSize)}
                     >
                       <ChevronRight className="w-4 h-4" />
@@ -671,7 +753,9 @@ export default function ResponsesIndex() {
                     <Button
                       variant="outline"
                       size="icon"
-                      onClick={() => setCurrentPage(Math.ceil(totalCount / pageSize))}
+                      onClick={() =>
+                        setCurrentPage(Math.ceil(totalCount / pageSize))
+                      }
                       disabled={currentPage >= Math.ceil(totalCount / pageSize)}
                     >
                       <ChevronsRight className="w-4 h-4" />
@@ -681,16 +765,20 @@ export default function ResponsesIndex() {
               )}
             </div>
           </CardHeader>
-          
+
           <CardContent>
             {responses.length === 0 ? (
               <div className="text-center py-12">
                 <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No responses found</h3>
+                <h3 className="text-lg font-semibold mb-2">
+                  No responses found
+                </h3>
                 <p className="text-muted-foreground mb-4">
-                  {loading ? "Loading responses..." : "No responses match your current filters."}
+                  {loading
+                    ? "Loading responses..."
+                    : "No responses match your current filters."}
                 </p>
-                {!loading && Object.values(filters).some(f => f.value) && (
+                {!loading && Object.values(filters).some((f) => f.value) && (
                   <Button variant="outline" onClick={clearFilters}>
                     Clear filters
                   </Button>
@@ -716,24 +804,26 @@ export default function ResponsesIndex() {
                         </TableCell>
                         {formFields.map((field) => {
                           const value = response.data[field.id];
-                          let displayValue = '';
-                          
+                          let displayValue = "";
+
                           if (value === null || value === undefined) {
-                            displayValue = '-';
-                          } else if (field.type === 'checkbox') {
-                            displayValue = value ? '✓ Yes' : '✗ No';
-                          } else if (field.type === 'email') {
+                            displayValue = "-";
+                          } else if (field.type === "checkbox") {
+                            displayValue = value ? "✓ Yes" : "✗ No";
+                          } else if (field.type === "email") {
                             displayValue = (
-                              <a 
+                              <a
                                 href={`mailto:${value}`}
                                 className="text-primary hover:underline"
                               >
                                 {value}
                               </a>
                             );
-                          } else if (field.type === 'date') {
+                          } else if (field.type === "date") {
                             try {
-                              displayValue = new Date(value).toLocaleDateString();
+                              displayValue = new Date(
+                                value
+                              ).toLocaleDateString();
                             } catch {
                               displayValue = String(value);
                             }
@@ -759,8 +849,13 @@ export default function ResponsesIndex() {
 
         {/* Info Footer */}
         <div className="text-center text-sm text-muted-foreground">
-          <p>Data is queried directly from Supabase with JSON filtering • Server-side pagination</p>
-          <p className="mt-1">Text fields use "contains" search • Other fields use exact matching</p>
+          <p>
+            Data is queried directly from Supabase with JSON filtering •
+            Server-side pagination
+          </p>
+          <p className="mt-1">
+            Text fields use "contains" search • Other fields use exact matching
+          </p>
         </div>
       </div>
 
@@ -773,11 +868,12 @@ export default function ResponsesIndex() {
                 <AlertTriangle className="h-5 w-5 text-red-600" />
               </div>
               <AlertDialogTitle>
-                Delete {responseToDelete?.identifier || 'Response'}?
+                Delete {responseToDelete?.identifier || "Response"}?
               </AlertDialogTitle>
             </div>
             <AlertDialogDescription>
-              This action cannot be undone. The response will be permanently deleted from the database.
+              This action cannot be undone. The response will be permanently
+              deleted from the database.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
