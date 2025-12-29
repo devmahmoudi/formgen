@@ -23,32 +23,10 @@ export default function FormGenerator() {
       {
         id: "field_001",
         type: "text",
-        label: "Your Full Name",
-        required: false,
-        placeholder: "John Doe"
-      },
-      {
-        id: "field_002",
-        type: "email",
-        label: "Email Address",
+        label: "Name",
         required: true,
-        placeholder: "you@example.com"
+        placeholder: "Enter name ..."
       },
-      {
-        id: "field_003",
-        type: "select",
-        label: "Product Category",
-        required: true,
-        placeholder: "Select a category",
-        options: ["Electronics", "Clothing", "Books"]
-      },
-      {
-        id: "field_004",
-        type: "radio",
-        label: "Satisfaction Level",
-        required: true,
-        options: ["Very Satisfied", "Satisfied", "Neutral"]
-      }
     ]
   });
 
