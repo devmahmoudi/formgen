@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
@@ -26,6 +27,7 @@ interface FormField {
   label: string;
   required: boolean;
   placeholder?: string;
+  options?: string[]; // Added for select, radio, dropdown fields
 }
 
 export default function SubmitForm() {
@@ -96,6 +98,7 @@ export default function SubmitForm() {
               initialData[field.id] = '';
               break;
             case 'select':
+            case 'radio':
               initialData[field.id] = '';
               break;
             default:
@@ -143,6 +146,10 @@ export default function SubmitForm() {
         if (field.type === 'checkbox') {
           if (!value) {
             newErrors[field.id] = `${field.label} is required`;
+          }
+        } else if (field.type === 'select' || field.type === 'radio') {
+          if (!value || value.toString().trim() === '') {
+            newErrors[field.id] = `Please select an option for ${field.label}`;
           }
         } else if (!value || value.toString().trim() === '') {
           newErrors[field.id] = `${field.label} is required`;
@@ -212,6 +219,10 @@ export default function SubmitForm() {
         case 'checkbox':
           resetData[field.id] = false;
           break;
+        case 'select':
+        case 'radio':
+          resetData[field.id] = '';
+          break;
         default:
           resetData[field.id] = '';
       }
@@ -223,7 +234,7 @@ export default function SubmitForm() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const renderField = (field: FormField) => {
+const renderField = (field: FormField) => {
     const fieldError = errors[field.id];
     const isRequired = field.required;
     const fieldValue = formData[field.id] || '';
@@ -258,13 +269,50 @@ export default function SubmitForm() {
               <SelectValue placeholder={field.placeholder || "Select an option"} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="option1">Option 1</SelectItem>
-              <SelectItem value="option2">Option 2</SelectItem>
-              <SelectItem value="option3">Option 3</SelectItem>
-              <SelectItem value="option4">Option 4</SelectItem>
-              <SelectItem value="option5">Option 5</SelectItem>
+              {/* Use a placeholder item without value prop or use a special placeholder */}
+              {field.options && field.options.length > 0 ? (
+                field.options.map((option, index) => (
+                  <SelectItem key={index} value={option}>
+                    {option}
+                  </SelectItem>
+                ))
+              ) : (
+                <SelectItem value="no-options" disabled>
+                  No options available
+                </SelectItem>
+              )}
             </SelectContent>
           </Select>
+        );
+      
+      case 'radio':
+        return (
+          <RadioGroup
+            value={fieldValue}
+            onValueChange={(value) => handleInputChange(field.id, value)}
+            className={fieldError ? "space-y-2 border border-red-300 rounded-md p-4" : "space-y-2"}
+          >
+            {field.options?.map((option, index) => (
+              <div key={index} className="flex items-center space-x-2">
+                <RadioGroupItem 
+                  value={option} 
+                  id={`${field.id}-${index}`}
+                  className={fieldError ? "border-red-500" : ""}
+                />
+                <Label 
+                  htmlFor={`${field.id}-${index}`}
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                >
+                  {option}
+                </Label>
+              </div>
+            ))}
+            {!field.options || field.options.length === 0 ? (
+              <p className="text-sm text-muted-foreground italic">
+                No options available
+              </p>
+            ) : null}
+          </RadioGroup>
         );
       
       case 'checkbox':
@@ -278,7 +326,7 @@ export default function SubmitForm() {
             />
             <Label
               htmlFor={field.id}
-              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
             >
               {field.placeholder || field.label}
               {isRequired && <span className="text-red-500 ml-1">*</span>}
@@ -286,10 +334,46 @@ export default function SubmitForm() {
           </div>
         );
       
-      default:
+      case 'date':
         return (
           <Input
-            type={field.type}
+            type="date"
+            {...baseProps}
+            value={fieldValue}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+              handleInputChange(field.id, e.target.value)
+            }
+          />
+        );
+      
+      case 'number':
+        return (
+          <Input
+            type="number"
+            {...baseProps}
+            value={fieldValue}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+              handleInputChange(field.id, e.target.value)
+            }
+          />
+        );
+      
+      case 'email':
+        return (
+          <Input
+            type="email"
+            {...baseProps}
+            value={fieldValue}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+              handleInputChange(field.id, e.target.value)
+            }
+          />
+        );
+      
+      default: // text and other types
+        return (
+          <Input
+            type="text"
             {...baseProps}
             value={fieldValue}
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
@@ -446,7 +530,8 @@ export default function SubmitForm() {
                     <div className="space-y-6">
                       {fields.map((field: FormField) => (
                         <div key={field.id} className="space-y-2">
-                          {field.type !== 'checkbox' && (
+                          {/* Don't show label for checkbox in the same way */}
+                          {(field.type !== 'checkbox') && (
                             <Label htmlFor={field.id}>
                               {field.label}
                               {field.required && <span className="text-red-500 ml-1">*</span>}
@@ -466,6 +551,14 @@ export default function SubmitForm() {
                             <p className="text-xs text-muted-foreground">
                               We'll never share your email with anyone else.
                             </p>
+                          )}
+                          
+                          {/* For checkbox fields, show label above if it's different from placeholder */}
+                          {field.type === 'checkbox' && field.placeholder !== field.label && (
+                            <Label htmlFor={field.id} className="text-base font-medium block mb-1">
+                              {field.label}
+                              {field.required && <span className="text-red-500 ml-1">*</span>}
+                            </Label>
                           )}
                         </div>
                       ))}
