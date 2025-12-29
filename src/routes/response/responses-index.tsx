@@ -5,10 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   AlertDialog,
@@ -38,7 +36,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { graphqlService } from "@/services/graphql.service";
-import { supabaseHelpers } from "@/lib/supabase-client";
 
 interface FormField {
   id: string;
@@ -46,6 +43,7 @@ interface FormField {
   label: string;
   required: boolean;
   placeholder?: string;
+  options?: string[]; // For select, radio, dropdown
 }
 
 interface FormResponse {
@@ -58,7 +56,6 @@ interface FormResponse {
 
 interface FilterState {
   [fieldId: string]: {
-    operator: string;
     value: any;
     label: string;
     type: string;
@@ -87,6 +84,20 @@ export default function ResponsesIndex() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [responseToDelete, setResponseToDelete] = useState<{id: string, identifier: string} | null>(null);
+
+  // Get implicit operator based on field type
+  const getImplicitOperator = (fieldType: string): string => {
+    switch (fieldType) {
+      case 'text':
+      case 'email':
+      case 'textarea':
+        return 'contains'; // Text fields use "contains" for partial matching
+      case 'checkbox':
+        return 'isTrue';   // Checkboxes use "isTrue" for filtering
+      default:
+        return 'equals';   // All other fields use exact matching
+    }
+  };
 
   // Fetch form details
   useEffect(() => {
@@ -123,7 +134,6 @@ export default function ResponsesIndex() {
         const initialFilters: FilterState = {};
         parsedFields.forEach(field => {
           initialFilters[field.id] = {
-            operator: supabaseHelpers.getDefaultOperator(field.type),
             value: '',
             label: field.label,
             type: field.type
@@ -148,30 +158,31 @@ export default function ResponsesIndex() {
 
     setLoading(true);
     try {
-      // Build filters object
+      // Build filters object with implicit operators
       const activeFilters: Record<string, { operator: string; value: any }> = {};
       
       // Add search term as a filter if present
-      if (searchTerm) {
-        // Apply search to all text fields
+      if (searchTerm.trim()) {
+        // Apply search to all text fields with 'contains' operator
         Object.entries(filters).forEach(([fieldId, filter]) => {
           if (filter.type === 'text' || filter.type === 'email' || filter.type === 'textarea') {
             activeFilters[fieldId] = {
               operator: 'contains',
-              value: searchTerm
+              value: searchTerm.trim()
             };
           }
         });
       }
 
-      // Add specific field filters
+      // Add specific field filters with implicit operators
       Object.entries(filters).forEach(([fieldId, filter]) => {
-        if (filter.value !== '' && filter.value !== null && filter.value !== undefined) {
-          // Don't override search term filters
-          if (!activeFilters[fieldId]) {
+        if (filter.value !== '' && filter.value !== null && filter.value !== undefined && filter.value !== false) {
+          // Don't override search term filters for text fields
+          if (!activeFilters[fieldId] || filter.type !== 'text') {
+            const operator = getImplicitOperator(filter.type);
             activeFilters[fieldId] = {
-              operator: filter.operator,
-              value: supabaseHelpers.parseFilterValue(filter.type, filter.value)
+              operator,
+              value: filter.value
             };
           }
         }
@@ -205,25 +216,16 @@ export default function ResponsesIndex() {
     }
   }, [formId, formFields.length, fetchResponses]);
 
-  const handleFilterChange = (fieldId: string, value: string, operator?: string) => {
+  const handleFilterChange = (fieldId: string, value: any) => {
     setFilters(prev => ({
       ...prev,
       [fieldId]: {
         ...prev[fieldId],
-        value: value,
-        operator: operator || prev[fieldId].operator
+        value: value
       }
     }));
-  };
-
-  const handleOperatorChange = (fieldId: string, operator: string) => {
-    setFilters(prev => ({
-      ...prev,
-      [fieldId]: {
-        ...prev[fieldId],
-        operator
-      }
-    }));
+    // Reset to first page when filter changes
+    setCurrentPage(1);
   };
 
   const clearFilters = () => {
@@ -237,6 +239,90 @@ export default function ResponsesIndex() {
     setFilters(clearedFilters);
     setSearchTerm("");
     setCurrentPage(1);
+  };
+
+  // Render filter input based on field type
+  const renderFilterInput = (field: FormField) => {
+    const filter = filters[field.id];
+
+    switch (field.type) {
+      case 'checkbox':
+        return (
+          <Select
+            value={filter.value?.toString() || ''}
+            onValueChange={(value) => handleFilterChange(field.id, value)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="All" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">All</SelectItem>
+              <SelectItem value="true">Yes</SelectItem>
+              <SelectItem value="false">No</SelectItem>
+            </SelectContent>
+          </Select>
+        );
+
+      case 'select':
+      case 'radio':
+      case 'dropdown':
+        return (
+          <Select
+            value={filter.value || ''}
+            onValueChange={(value) => handleFilterChange(field.id, value)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="All" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">All</SelectItem>
+              {field.options?.map((option) => (
+                <SelectItem key={option} value={option}>{option}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        );
+
+      case 'number':
+        return (
+          <Input
+            type="number"
+            placeholder={`Filter ${field.label.toLowerCase()}...`}
+            value={filter.value || ''}
+            onChange={(e) => handleFilterChange(field.id, e.target.value)}
+          />
+        );
+
+      case 'date':
+        return (
+          <Input
+            type="date"
+            placeholder={`Filter ${field.label.toLowerCase()}...`}
+            value={filter.value || ''}
+            onChange={(e) => handleFilterChange(field.id, e.target.value)}
+          />
+        );
+
+      case 'text':
+      case 'email':
+      case 'textarea':
+        return (
+          <Input
+            placeholder={`Search in ${field.label.toLowerCase()}...`}
+            value={filter.value || ''}
+            onChange={(e) => handleFilterChange(field.id, e.target.value)}
+          />
+        );
+
+      default:
+        return (
+          <Input
+            placeholder={`Filter ${field.label.toLowerCase()}...`}
+            value={filter.value || ''}
+            onChange={(e) => handleFilterChange(field.id, e.target.value)}
+          />
+        );
+    }
   };
 
   // Delete response functions
@@ -338,122 +424,6 @@ export default function ResponsesIndex() {
       hour: '2-digit',
       minute: '2-digit'
     });
-  };
-
-  const getOperatorOptions = (fieldType: string) => {
-    switch (fieldType) {
-      case 'text':
-      case 'email':
-      case 'textarea':
-        return [
-          { value: 'contains', label: 'Contains' },
-          { value: 'equals', label: 'Equals' },
-          { value: 'startsWith', label: 'Starts with' },
-          { value: 'endsWith', label: 'Ends with' }
-        ];
-      case 'number':
-        return [
-          { value: 'equals', label: 'Equals' },
-          { value: 'greaterThan', label: 'Greater than' },
-          { value: 'lessThan', label: 'Less than' },
-          { value: 'greaterThanOrEqual', label: '≥' },
-          { value: 'lessThanOrEqual', label: '≤' }
-        ];
-      case 'checkbox':
-        return [
-          { value: 'isTrue', label: 'Is checked' },
-          { value: 'isFalse', label: 'Is not checked' }
-        ];
-      default:
-        return [{ value: 'equals', label: 'Equals' }];
-    }
-  };
-
-  const renderFilterInput = (field: FormField) => {
-    const filter = filters[field.id];
-
-    switch (field.type) {
-      case 'checkbox':
-        return (
-          <Select
-            value={filter.value}
-            onValueChange={(value) => handleFilterChange(field.id, value)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="">All</SelectItem>
-              <SelectItem value="true">Yes</SelectItem>
-              <SelectItem value="false">No</SelectItem>
-            </SelectContent>
-          </Select>
-        );
-
-      case 'number':
-        return (
-          <div className="flex gap-2">
-            <Select
-              value={filter.operator}
-              onValueChange={(value) => handleOperatorChange(field.id, value)}
-              className="w-24"
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {getOperatorOptions(field.type).map(op => (
-                  <SelectItem key={op.value} value={op.value}>{op.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Input
-              type="number"
-              placeholder="Value..."
-              value={filter.value}
-              onChange={(e) => handleFilterChange(field.id, e.target.value)}
-              className="flex-1"
-            />
-          </div>
-        );
-
-      case 'text':
-      case 'email':
-      case 'textarea':
-        return (
-          <div className="flex gap-2">
-            <Select
-              value={filter.operator}
-              onValueChange={(value) => handleOperatorChange(field.id, value)}
-              className="w-32"
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {getOperatorOptions(field.type).map(op => (
-                  <SelectItem key={op.value} value={op.value}>{op.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Input
-              placeholder={`Filter ${field.label.toLowerCase()}...`}
-              value={filter.value}
-              onChange={(e) => handleFilterChange(field.id, e.target.value)}
-              className="flex-1"
-            />
-          </div>
-        );
-
-      default:
-        return (
-          <Input
-            placeholder={`Filter ${field.label.toLowerCase()}...`}
-            value={filter.value}
-            onChange={(e) => handleFilterChange(field.id, e.target.value)}
-          />
-        );
-    }
   };
 
   // Render table actions cell
@@ -614,6 +584,9 @@ export default function ResponsesIndex() {
                       <div key={field.id} className="space-y-2">
                         <Label htmlFor={`filter-${field.id}`} className="text-sm">
                           {field.label}
+                          <span className="text-xs text-muted-foreground ml-2">
+                            ({field.type})
+                          </span>
                         </Label>
                         {renderFilterInput(field)}
                       </div>
@@ -758,6 +731,12 @@ export default function ResponsesIndex() {
                                 {value}
                               </a>
                             );
+                          } else if (field.type === 'date') {
+                            try {
+                              displayValue = new Date(value).toLocaleDateString();
+                            } catch {
+                              displayValue = String(value);
+                            }
                           } else {
                             displayValue = String(value);
                           }
@@ -781,6 +760,7 @@ export default function ResponsesIndex() {
         {/* Info Footer */}
         <div className="text-center text-sm text-muted-foreground">
           <p>Data is queried directly from Supabase with JSON filtering • Server-side pagination</p>
+          <p className="mt-1">Text fields use "contains" search • Other fields use exact matching</p>
         </div>
       </div>
 
