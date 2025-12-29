@@ -512,7 +512,7 @@ export default function ResponsesIndex() {
     return (
       <TableCell className="w-28">
         <div className="flex gap-1">
-          <Button
+          {/* <Button
             variant="ghost"
             size="icon"
             onClick={() => {
@@ -522,7 +522,7 @@ export default function ResponsesIndex() {
             className="h-8 w-8"
           >
             <Eye className="w-3.5 h-3.5" />
-          </Button>
+          </Button> */}
 
           <Button
             variant="ghost"
@@ -598,10 +598,6 @@ export default function ResponsesIndex() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={fetchResponses}>
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Refresh
-            </Button>
             <Button
               variant="outline"
               onClick={handleExportCSV}
@@ -847,16 +843,6 @@ export default function ResponsesIndex() {
           </CardContent>
         </Card>
 
-        {/* Info Footer */}
-        <div className="text-center text-sm text-muted-foreground">
-          <p>
-            Data is queried directly from Supabase with JSON filtering •
-            Server-side pagination
-          </p>
-          <p className="mt-1">
-            Text fields use "contains" search • Other fields use exact matching
-          </p>
-        </div>
       </div>
 
       {/* Delete Confirmation Dialog */}
