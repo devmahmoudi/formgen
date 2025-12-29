@@ -267,7 +267,9 @@ export default function FormList() {
                       <Link to={`/form/submit/${form.id}`}>
                         <Button className="cursor-pointer" size="sm">
                           <LayersPlus className="w-4 h-4 mr-1" />
-                          <span className="md:hidden xl:inline">Data Entry</span>
+                          <span className="md:hidden xl:inline">
+                            Data Entry
+                          </span>
                         </Button>
                       </Link>
 
@@ -290,6 +292,16 @@ export default function FormList() {
                       >
                         <Copy className="w-4 h-4" />
                       </Button>
+
+                      <Link to={`/form/edit/${form.id}`}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="cursor-pointer"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                      </Link>
 
                       <Button
                         className="cursor-pointer"

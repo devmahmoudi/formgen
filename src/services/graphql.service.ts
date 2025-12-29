@@ -124,6 +124,45 @@ export class GraphQLService {
     return result.insertIntoformsCollection?.records?.[0] || null;
   }
 
+  async updateForm(id: string, formData: {
+    title: string;
+    description?: string | null;
+    schema: any;
+    updated_at: string;
+  }) {
+    const mutation = `
+      mutation UpdateForm($id: uuid!, $updates: formsUpdateInput!) {
+        updateformsCollection(
+          filter: { id: { eq: $id } }
+          set: $updates
+          atMost: 1
+        ) {
+          records {
+            id
+            title
+            description
+            schema
+            created_at
+            updated_at
+          }
+        }
+      }
+    `;
+
+    const variables = {
+      id,
+      updates: {
+        title: formData.title,
+        description: formData.description,
+        schema: formData.schema,
+        updated_at: formData.updated_at
+      }
+    };
+
+    const result = await this.mutate<{ updateformsCollection: any }>(mutation, variables);
+    return result.updateformsCollection?.records?.[0] || null;
+  }
+
   async submitFormResponse(formId: string, data: Record<string, any>) {
     const mutation = `
       mutation SubmitFormResponse($objects: [responsesInsertInput!]!) {

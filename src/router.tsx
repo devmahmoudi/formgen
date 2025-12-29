@@ -1,3 +1,4 @@
+// In your router configuration file
 import { createBrowserRouter } from "react-router-dom";
 import Layout from "./components/layout";
 import HomePage from "./routes/home";
@@ -9,6 +10,7 @@ import FormGenerator from "./routes/form/form-generator";
 import FormList from "./routes/form/form-list";
 import SubmitForm from "./routes/form/submit-form";
 import ResponsesIndex from "./routes/response/responses-index";
+import EditForm from "./routes/form/edit-form";
 
 export const router = createBrowserRouter([
   {
@@ -45,7 +47,7 @@ export const router = createBrowserRouter([
         path: "generator",
         element: <FormGenerator/>
       },
-       {
+      {
         path: "submit/:id",
         element: <SubmitForm/>
       },
@@ -55,7 +57,11 @@ export const router = createBrowserRouter([
         element: <FormList/>
       },
       {
-        path: ":formId/responses", // Add this route
+        path: "edit/:formId",
+        element: <EditForm />,
+      },
+      {
+        path: ":formId/responses",
         element: <ResponsesIndex />,
       }
     ]
