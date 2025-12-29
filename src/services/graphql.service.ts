@@ -254,6 +254,40 @@ export class GraphQLService {
 
     return data || [];
   }
+
+  async deleteResponse(responseId: string) {
+  const mutation = `
+    mutation DeleteResponse($id: uuid!) {
+      deleteFromresponsesCollection(
+        filter: { id: { eq: $id } }
+        atMost: 1
+      ) {
+        records {
+          id
+        }
+      }
+    }
+  `;
+
+  const result = await this.mutate<{ deleteFromresponsesCollection: any }>(mutation, { id: responseId });
+  return result.deleteFromresponsesCollection?.records?.[0] || null;
+}
+
+// Also add a Supabase direct delete method for better performance
+async deleteResponseDirect(responseId: string) {
+  const { data, error } = await supabase
+    .from('responses')
+    .delete()
+    .eq('id', responseId)
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+}
 }
 
 export const graphqlService = GraphQLService.getInstance();
