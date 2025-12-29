@@ -1,4 +1,13 @@
-export type FieldType = "text" | "email" | "number" | "textarea" | "select" | "checkbox";
+// ./types.ts
+export type FieldType = 
+  | 'text' 
+  | 'email' 
+  | 'number' 
+  | 'textarea' 
+  | 'select' 
+  | 'radio' 
+  | 'checkbox' 
+  | 'date';
 
 export interface FormField {
   id: string;
@@ -6,11 +15,11 @@ export interface FormField {
   label: string;
   required: boolean;
   placeholder?: string;
-  options?: string[];
+  options?: string[]; // For select, radio, dropdown fields
 }
 
 export interface FormSchema {
   title: string;
-  description: string;
+  description?: string;
   fields: FormField[];
 }
