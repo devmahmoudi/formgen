@@ -124,12 +124,15 @@ export class GraphQLService {
     return result.insertIntoformsCollection?.records?.[0] || null;
   }
 
-  async updateForm(id: string, formData: {
-    title: string;
-    description?: string | null;
-    schema: any;
-    updated_at: string;
-  }) {
+  async updateForm(
+    id: string,
+    formData: {
+      title: string;
+      description?: string | null;
+      schema: any;
+      updated_at: string;
+    }
+  ) {
     const mutation = `
       mutation UpdateForm($id: uuid!, $updates: formsUpdateInput!) {
         updateformsCollection(
@@ -155,11 +158,14 @@ export class GraphQLService {
         title: formData.title,
         description: formData.description,
         schema: formData.schema,
-        updated_at: formData.updated_at
-      }
+        updated_at: formData.updated_at,
+      },
     };
 
-    const result = await this.mutate<{ updateformsCollection: any }>(mutation, variables);
+    const result = await this.mutate<{ updateformsCollection: any }>(
+      mutation,
+      variables
+    );
     return result.updateformsCollection?.records?.[0] || null;
   }
 
@@ -329,7 +335,6 @@ export class GraphQLService {
     }
   }
 
-  // Backward compatibility method
   async getFormResponses(formId: string) {
     const { data, error } = await supabase
       .from("responses")
@@ -365,7 +370,6 @@ export class GraphQLService {
     return result.deleteFromresponsesCollection?.records?.[0] || null;
   }
 
-  // Also add a Supabase direct delete method for better performance
   async deleteResponseDirect(responseId: string) {
     const { data, error } = await supabase
       .from("responses")
@@ -379,6 +383,63 @@ export class GraphQLService {
     }
 
     return data;
+  }
+
+  async getResponseById(responseId: string) {
+    const query = `
+    query GetResponseById($id: uuid!) {
+      responsesCollection(filter: { id: { eq: $id } }) {
+        edges {
+          node {
+            id
+            form_id
+            data
+            created_at
+            updated_at
+          }
+        }
+      }
+    }
+  `;
+
+    const result = await this.query<{ responsesCollection: any }>(query, {
+      id: responseId,
+    });
+    return result.responsesCollection?.edges?.[0]?.node || null;
+  }
+
+  async updateResponse(responseId: string, data: Record<string, any>) {
+    const mutation = `
+    mutation UpdateResponse($id: uuid!, $updates: responsesUpdateInput!) {
+      updateresponsesCollection(
+        filter: { id: { eq: $id } }
+        set: $updates
+        atMost: 1
+      ) {
+        records {
+          id
+          form_id
+          data
+          created_at
+          updated_at
+        }
+      }
+    }
+  `;
+
+    const variables = {
+      id: responseId,
+      updates: {
+        data: JSON.stringify(data),
+        updated_at: new Date().toISOString(),
+      },
+    };
+
+    const result = await this.mutate<{ updateresponsesCollection: any }>(
+      mutation,
+      variables
+    );
+    return result.updateresponsesCollection?.records?.[0] || null;
   }
 }
 
