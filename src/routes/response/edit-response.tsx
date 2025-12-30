@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -18,19 +19,42 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   ArrowLeft,
-  CheckCircle,
   Save,
+  AlertTriangle,
   RefreshCw,
-  AlertCircle,
-  History,
-  Calendar,
+  Link,
+  Check,
+  ChevronsUpDown,
+  X,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { graphqlService } from "@/services/graphql.service";
 
@@ -40,93 +64,86 @@ interface FormField {
   label: string;
   required: boolean;
   placeholder?: string;
-  options?: string[]; // For select, radio, dropdown fields
+  options?: string[];
+  relationConfig?: {
+    formId?: string;
+    formTitle?: string;
+    displayField?: string;
+  };
+}
+
+interface RelatedFormOption {
+  id: string;
+  displayValue: string;
+  data: Record<string, any>;
 }
 
 export default function EditResponse() {
   const { formId, responseId } = useParams<{ formId: string; responseId: string }>();
   const navigate = useNavigate();
 
-  const [formData, setFormData] = useState<Record<string, any>>({});
-  const [originalData, setOriginalData] = useState<Record<string, any>>({});
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [isSaved, setIsSaved] = useState(false);
-  const [fields, setFields] = useState<FormField[]>([]);
-  const [formTitle, setFormTitle] = useState("");
-  const [formDescription, setFormDescription] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [formNotFound, setFormNotFound] = useState(false);
-  const [responseNotFound, setResponseNotFound] = useState(false);
-  const [hasChanges, setHasChanges] = useState(false);
-  const [responseCreatedAt, setResponseCreatedAt] = useState("");
-  const [responseUpdatedAt, setResponseUpdatedAt] = useState("");
+  const [formTitle, setFormTitle] = useState("");
+  const [formFields, setFormFields] = useState<FormField[]>([]);
+  const [formData, setFormData] = useState<Record<string, any>>({});
+  const [originalData, setOriginalData] = useState<Record<string, any>>({});
 
-  // Fetch form schema and response data
+  // Relation field data
+  const [relationOptions, setRelationOptions] = useState<Record<string, RelatedFormOption[]>>({});
+  const [loadingRelations, setLoadingRelations] = useState<Record<string, boolean>>({});
+  const [openRelationPopovers, setOpenRelationPopovers] = useState<Record<string, boolean>>({});
+
+  // Unsaved changes warning
+  const [hasChanges, setHasChanges] = useState(false);
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
+  const [navigateTo, setNavigateTo] = useState<string | null>(null);
+
+  // Fetch form and response data
   useEffect(() => {
-    if (!formId || !responseId) {
-      setFormNotFound(true);
-      setLoading(false);
-      return;
-    }
+    if (!formId || !responseId) return;
 
     const fetchData = async () => {
       setLoading(true);
-      setFormNotFound(false);
-      setResponseNotFound(false);
-
       try {
         // Fetch form details
         const form = await graphqlService.getFormById(formId);
-
         if (!form) {
-          setFormNotFound(true);
           toast.error("Form not found");
+          navigate(`/form/${formId}/responses`);
           return;
         }
 
-        setFormTitle(form.title || "");
-        setFormDescription(form.description || "");
+        setFormTitle(form.title || "Untitled Form");
 
+        // Parse form schema
         let parsedFields: FormField[] = [];
-
         try {
           let schema = form.schema;
           if (typeof schema === "string") {
             schema = JSON.parse(schema);
           }
-
           if (schema && typeof schema === "object" && "fields" in schema) {
             parsedFields = schema.fields || [];
           }
-        } catch (parseError) {
-          console.error("Error parsing schema:", parseError);
-          toast.error("Error loading form structure");
+        } catch (error) {
+          console.error("Error parsing schema:", error);
         }
-
-        setFields(parsedFields);
+        setFormFields(parsedFields);
 
         // Fetch response data
         const response = await graphqlService.getResponseById(responseId);
-
         if (!response) {
-          setResponseNotFound(true);
           toast.error("Response not found");
+          navigate(`/form/${formId}/responses`);
           return;
         }
 
-        if (response.form_id !== formId) {
-          toast.error("Response does not belong to this form");
-          setResponseNotFound(true);
-          return;
-        }
-
-        setResponseCreatedAt(response.created_at);
-        setResponseUpdatedAt(response.updated_at || response.created_at);
-
+        // Parse response data - this should be the form field data
         let responseData: Record<string, any> = {};
         try {
-          responseData = typeof response.data === 'string' 
+          // The response.data field contains the form field values
+          responseData = typeof response.data === "string" 
             ? JSON.parse(response.data) 
             : response.data;
         } catch (error) {
@@ -134,254 +151,276 @@ export default function EditResponse() {
           responseData = {};
         }
 
-        // Initialize form data structure with response values
-        const initialData: Record<string, any> = {};
-        parsedFields.forEach((field: FormField) => {
-          const value = responseData[field.id];
-          
-          // Handle missing values in response
-          if (value === undefined || value === null) {
-            switch (field.type) {
-              case "checkbox":
-                initialData[field.id] = false;
-                break;
-              case "number":
-                initialData[field.id] = "";
-                break;
-              case "select":
-              case "radio":
-                initialData[field.id] = "";
-                break;
-              default:
-                initialData[field.id] = "";
-            }
-          } else {
-            initialData[field.id] = value;
-          }
-        });
+        console.log("Fetched response data:", responseData); // Debug log
 
-        setFormData(initialData);
-        setOriginalData(initialData);
+        setFormData(responseData);
+        setOriginalData(responseData);
+
+        // Fetch relation options for relation fields
+        await fetchRelationOptions(parsedFields, responseData);
 
       } catch (error: any) {
         console.error("Error fetching data:", error);
-        toast.error(`Error loading data: ${error.message}`);
-        setFormNotFound(true);
+        toast.error(`Failed to load data: ${error.message}`);
+        navigate(`/form/${formId}/responses`);
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, [formId, responseId]);
+  }, [formId, responseId, navigate]);
 
-  // Check for changes
-  useEffect(() => {
-    if (Object.keys(originalData).length > 0 && Object.keys(formData).length > 0) {
-      const isChanged = JSON.stringify(formData) !== JSON.stringify(originalData);
-      setHasChanges(isChanged);
+  // Fetch options for relation fields
+  const fetchRelationOptions = async (fields: FormField[], currentData: Record<string, any>) => {
+    const relationFields = fields.filter(f => f.type === 'relation' && f.relationConfig?.formId);
+    
+    for (const field of relationFields) {
+      setLoadingRelations(prev => ({ ...prev, [field.id]: true }));
+      
+      try {
+        const relatedFormId = field.relationConfig!.formId!;
+        const responses = await graphqlService.getFormResponses(relatedFormId);
+        
+        // Parse the related form to get display field configuration
+        const relatedForm = await graphqlService.getFormById(relatedFormId);
+        let relatedFormFields: FormField[] = [];
+        
+        if (relatedForm && relatedForm.schema) {
+          try {
+            let schema = relatedForm.schema;
+            if (typeof schema === 'string') {
+              schema = JSON.parse(schema);
+            }
+            if (schema && schema.fields) {
+              relatedFormFields = schema.fields;
+            }
+          } catch (error) {
+            console.error("Error parsing related form schema:", error);
+          }
+        }
+        
+        // Create options array
+        const options: RelatedFormOption[] = [];
+        
+        responses.forEach((response: any) => {
+          let data: Record<string, any> = {};
+          try {
+            data = typeof response.data === 'string' 
+              ? JSON.parse(response.data) 
+              : response.data;
+          } catch (error) {
+            console.error("Error parsing related response data:", error);
+          }
+
+          // Get display value
+          let displayValue = `Response ${response.id?.substring?.(0, 8) || 'Unknown'}...`;
+          
+          if (field.relationConfig?.displayField && data[field.relationConfig.displayField]) {
+            displayValue = String(data[field.relationConfig.displayField]);
+          } else {
+            // Fallback: find any text field
+            const textField = relatedFormFields.find(f => 
+              ['text', 'email', 'textarea'].includes(f.type)
+            );
+            if (textField && data[textField.id]) {
+              displayValue = String(data[textField.id]);
+            }
+          }
+          
+          options.push({
+            id: String(response.id || ''),
+            displayValue,
+            data
+          });
+        });
+
+        setRelationOptions(prev => ({
+          ...prev,
+          [field.id]: options
+        }));
+        
+        // If this field has a value, ensure it's in the options
+        const currentValue = currentData[field.id];
+        if (currentValue && !options.some(opt => opt.id === String(currentValue))) {
+          // Try to fetch the specific response
+          try {
+            const specificResponse = await graphqlService.getResponseById(currentValue);
+            if (specificResponse) {
+              let data: Record<string, any> = {};
+              try {
+                data = typeof specificResponse.data === 'string' 
+                  ? JSON.parse(specificResponse.data) 
+                  : specificResponse.data;
+              } catch (error) {
+                console.error("Error parsing specific response data:", error);
+              }
+
+              let displayValue = `Response ${specificResponse.id?.substring?.(0, 8) || 'Unknown'}...`;
+              
+              if (field.relationConfig?.displayField && data[field.relationConfig.displayField]) {
+                displayValue = String(data[field.relationConfig.displayField]);
+              }
+
+              setRelationOptions(prev => ({
+                ...prev,
+                [field.id]: [
+                  ...options,
+                  {
+                    id: String(specificResponse.id || ''),
+                    displayValue,
+                    data
+                  }
+                ]
+              }));
+            }
+          } catch (error) {
+            console.error(`Error fetching specific response ${currentValue}:`, error);
+          }
+        }
+        
+      } catch (error) {
+        console.error(`Error fetching related form data for field ${field.id}:`, error);
+        toast.error(`Failed to load options for ${field.label}`);
+      } finally {
+        setLoadingRelations(prev => ({ ...prev, [field.id]: false }));
+      }
     }
+  };
+
+  // Check for unsaved changes
+  useEffect(() => {
+    const checkChanges = () => {
+      const hasChanges = JSON.stringify(formData) !== JSON.stringify(originalData);
+      setHasChanges(hasChanges);
+    };
+    
+    checkChanges();
   }, [formData, originalData]);
 
-  const handleInputChange = (fieldId: string, value: any) => {
-    setFormData((prev) => ({
+  // Handle field changes
+  const handleFieldChange = (fieldId: string, value: any) => {
+    setFormData(prev => ({
       ...prev,
-      [fieldId]: value,
+      [fieldId]: value
     }));
-
-    // Clear error for this field if it exists
-    if (errors[fieldId]) {
-      setErrors((prev) => {
-        const newErrors = { ...prev };
-        delete newErrors[fieldId];
-        return newErrors;
-      });
-    }
   };
 
-  const validateForm = () => {
-    const newErrors: Record<string, string> = {};
-
-    fields.forEach((field: FormField) => {
-      const value = formData[field.id];
-
-      // Check required fields
-      if (field.required) {
-        if (field.type === "checkbox") {
-          if (!value) {
-            newErrors[field.id] = `${field.label} is required`;
-          }
-        } else if (field.type === "select" || field.type === "radio") {
-          if (!value || value.toString().trim() === "") {
-            newErrors[field.id] = `Please select an option for ${field.label}`;
-          }
-        } else if (!value || value.toString().trim() === "") {
-          newErrors[field.id] = `${field.label} is required`;
-        }
-      }
-
-      // Email validation
-      if (field.type === "email" && value && value.trim() !== "") {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(value)) {
-          newErrors[field.id] = "Please enter a valid email address";
-        }
-      }
-
-      // Number validation
-      if (field.type === "number" && value && value.trim() !== "") {
-        if (isNaN(Number(value))) {
-          newErrors[field.id] = "Please enter a valid number";
-        }
-      }
-    });
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+  // Handle relation field change
+  const handleRelationChange = (fieldId: string, responseId: string) => {
+    handleFieldChange(fieldId, responseId);
+    setOpenRelationPopovers(prev => ({ ...prev, [fieldId]: false }));
   };
 
-  const handleSave = async (e: React.FormEvent) => {
+  // Clear relation field
+  const handleClearRelation = (fieldId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    handleFieldChange(fieldId, "");
+  };
+
+  // Handle popover toggle
+  const toggleRelationPopover = (fieldId: string, open: boolean) => {
+    setOpenRelationPopovers(prev => ({ ...prev, [fieldId]: open }));
+  };
+
+  // Handle form submission
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!validateForm()) {
-      toast.error("Please fix the errors in the form");
+    
+    // Validate required fields
+    const missingFields = formFields
+      .filter(field => field.required && !formData[field.id])
+      .map(field => field.label);
+    
+    if (missingFields.length > 0) {
+      toast.error(`Please fill in required fields: ${missingFields.join(", ")}`);
       return;
     }
-
-    if (!responseId) {
-      toast.error("Response ID is missing");
-      return;
-    }
-
+    
     setSaving(true);
     try {
-      const result = await graphqlService.updateResponse(responseId, formData);
-
-      if (result) {
-        setIsSaved(true);
+      console.log("Submitting form data:", formData); // Debug log
+      
+      // Pass only the form field data, not the entire response object
+      const updatedResponse = await graphqlService.updateResponse(responseId!, formData);
+      
+      if (updatedResponse) {
+        toast.success("Response updated successfully");
+        
+        // Update original data with the new form data
         setOriginalData(formData);
         setHasChanges(false);
-        setResponseUpdatedAt(new Date().toISOString());
-        toast.success("Response updated successfully!");
-        setErrors({});
+        
+        // Navigate back to responses list
+        navigate(`/form/${formId}/responses`);
       } else {
-        toast.error("Failed to update response - no response received");
+        toast.error("Failed to update response");
       }
+      
     } catch (error: any) {
-      console.error("Update error:", error);
-      toast.error(`Failed to update: ${error.message}`);
+      console.error("Error updating response:", error);
+      toast.error(`Failed to update response: ${error.message}`);
     } finally {
       setSaving(false);
     }
   };
 
-  const handleViewResponses = () => {
-    navigate(`/form/${formId}/responses`);
+  // Handle navigation with unsaved changes warning
+  const handleNavigation = (path: string) => {
+    if (hasChanges) {
+      setNavigateTo(path);
+      setShowUnsavedDialog(true);
+    } else {
+      navigate(path);
+    }
   };
 
-  const handleEditAnother = () => {
-    setIsSaved(false);
+  // Confirm navigation despite unsaved changes
+  const confirmNavigation = () => {
+    if (navigateTo) {
+      navigate(navigateTo);
+    }
+    setShowUnsavedDialog(false);
+    setNavigateTo(null);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  // Get display value for a selected relation
+  const getRelationDisplayValue = (fieldId: string, value: string): string => {
+    const options = relationOptions[fieldId] || [];
+    const selectedOption = options.find(opt => opt.id === String(value));
+    return selectedOption?.displayValue || `ID: ${String(value).substring(0, 8)}...`;
   };
 
-  const renderField = (field: FormField) => {
-    const fieldError = errors[field.id];
-    const isRequired = field.required;
-    const fieldValue = formData[field.id] || "";
-
-    const baseProps = {
-      id: field.id,
-      required: isRequired,
-      placeholder: field.placeholder || "",
-      className: fieldError ? "border-red-500 focus-visible:ring-red-500" : "",
-    };
+  // Render field input based on type
+  const renderFieldInput = (field: FormField) => {
+    const value = formData[field.id];
+    const isLoading = loadingRelations[field.id];
+    const options = relationOptions[field.id] || [];
+    const isOpen = openRelationPopovers[field.id] || false;
 
     switch (field.type) {
-      case "textarea":
+      case "text":
+      case "email":
         return (
-          <Textarea
-            {...baseProps}
-            value={fieldValue}
-            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-              handleInputChange(field.id, e.target.value)
-            }
-            rows={4}
+          <Input
+            id={field.id}
+            type={field.type}
+            placeholder={field.placeholder}
+            value={value || ""}
+            onChange={(e) => handleFieldChange(field.id, e.target.value)}
+            required={field.required}
           />
         );
 
-      case "select":
-        const hasOptions = field.options && field.options.length > 0;
-
+      case "textarea":
         return (
-          <Select
-            value={fieldValue}
-            onValueChange={(value) => handleInputChange(field.id, value)}
-            disabled={!hasOptions}
-          >
-            <SelectTrigger
-              className={`w-full ${fieldError ? "border-red-500" : ""}`}
-            >
-              <SelectValue
-                placeholder={
-                  hasOptions
-                    ? field.placeholder || "Select an option"
-                    : "No options available"
-                }
-              />
-            </SelectTrigger>
-            {hasOptions && (
-              <SelectContent>
-                {field.options.map((option, index) => (
-                  <SelectItem key={index} value={option}>
-                    {option}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            )}
-          </Select>
-        );
-
-      case "radio":
-        return (
-          <RadioGroup
-            value={fieldValue}
-            onValueChange={(value) => handleInputChange(field.id, value)}
-            className={
-              fieldError
-                ? "space-y-2 border border-red-300 rounded-md p-4"
-                : "space-y-2"
-            }
-          >
-            {field.options?.map((option, index) => (
-              <div key={index} className="flex items-center space-x-2">
-                <RadioGroupItem
-                  value={option}
-                  id={`${field.id}-${index}`}
-                  className={fieldError ? "border-red-500" : ""}
-                />
-                <Label
-                  htmlFor={`${field.id}-${index}`}
-                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-                >
-                  {option}
-                </Label>
-              </div>
-            ))}
-            {!field.options || field.options.length === 0 ? (
-              <p className="text-sm text-muted-foreground italic">
-                No options available
-              </p>
-            ) : null}
-          </RadioGroup>
+          <Textarea
+            id={field.id}
+            placeholder={field.placeholder}
+            value={value || ""}
+            onChange={(e) => handleFieldChange(field.id, e.target.value)}
+            required={field.required}
+          />
         );
 
       case "checkbox":
@@ -389,71 +428,153 @@ export default function EditResponse() {
           <div className="flex items-center space-x-2">
             <Checkbox
               id={field.id}
-              checked={!!fieldValue}
-              onCheckedChange={(checked) =>
-                handleInputChange(field.id, checked)
-              }
-              className={
-                fieldError
-                  ? "border-red-500 data-[state=checked]:bg-red-500"
-                  : ""
-              }
+              checked={value || false}
+              onCheckedChange={(checked) => handleFieldChange(field.id, checked)}
+              required={field.required}
             />
-            <Label
-              htmlFor={field.id}
-              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
-            >
-              {field.placeholder || field.label}
-              {isRequired && <span className="text-red-500 ml-1">*</span>}
+            <Label htmlFor={field.id} className="cursor-pointer">
+              {field.placeholder || "Check this box"}
             </Label>
           </div>
         );
 
-      case "date":
+      case "select":
+      case "radio":
+      case "dropdown":
         return (
-          <Input
-            type="date"
-            {...baseProps}
-            value={fieldValue}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              handleInputChange(field.id, e.target.value)
-            }
-          />
+          <Select
+            value={value || ""}
+            onValueChange={(val) => handleFieldChange(field.id, val)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={field.placeholder || `Select ${field.label.toLowerCase()}...`} />
+            </SelectTrigger>
+            <SelectContent>
+              {!field.required && (
+                <SelectItem value="">-- Not selected --</SelectItem>
+              )}
+              {field.options?.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        );
+
+      case "relation":
+        return (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Link className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-medium">
+                Link to: {field.relationConfig?.formTitle || "Related Form"}
+              </span>
+            </div>
+
+            {isLoading ? (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>Loading options...</span>
+              </div>
+            ) : (
+              <Popover open={isOpen} onOpenChange={(open) => toggleRelationPopover(field.id, open)}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={isOpen}
+                    className="w-full justify-between"
+                  >
+                    {value ? (
+                      <div className="flex items-center justify-between w-full">
+                        <span>{getRelationDisplayValue(field.id, value)}</span>
+                        {!field.required && (
+                          <X
+                            className="ml-2 h-4 w-4 text-muted-foreground hover:text-foreground"
+                            onClick={(e) => handleClearRelation(field.id, e)}
+                          />
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">
+                        {field.placeholder || "Select related response..."}
+                      </span>
+                    )}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-full p-0" align="start">
+                  <Command>
+                    <CommandInput 
+                      placeholder="Search responses..." 
+                      className="h-9"
+                    />
+                    <CommandList>
+                      <CommandEmpty>No responses found.</CommandEmpty>
+                      <CommandGroup>
+                        {options.map((option) => (
+                          <CommandItem
+                            key={option.id}
+                            value={option.displayValue}
+                            onSelect={() => handleRelationChange(field.id, option.id)}
+                            className="cursor-pointer"
+                          >
+                            <div className="flex flex-col">
+                              <span className="font-medium">{option.displayValue}</span>
+                              <span className="text-xs text-muted-foreground">
+                                ID: {option.id.substring(0, 8)}...
+                              </span>
+                            </div>
+                            <Check
+                              className={cn(
+                                "ml-auto h-4 w-4",
+                                value === option.id ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+            )}
+          </div>
         );
 
       case "number":
         return (
           <Input
+            id={field.id}
             type="number"
-            {...baseProps}
-            value={fieldValue}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              handleInputChange(field.id, e.target.value)
-            }
+            placeholder={field.placeholder}
+            value={value || ""}
+            onChange={(e) => handleFieldChange(field.id, e.target.value)}
+            required={field.required}
           />
         );
 
-      case "email":
+      case "date":
         return (
           <Input
-            type="email"
-            {...baseProps}
-            value={fieldValue}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              handleInputChange(field.id, e.target.value)
-            }
+            id={field.id}
+            type="date"
+            placeholder={field.placeholder}
+            value={value || ""}
+            onChange={(e) => handleFieldChange(field.id, e.target.value)}
+            required={field.required}
           />
         );
 
-      default: // text and other types
+      default:
         return (
           <Input
-            type="text"
-            {...baseProps}
-            value={fieldValue}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              handleInputChange(field.id, e.target.value)
-            }
+            id={field.id}
+            placeholder={field.placeholder}
+            value={value || ""}
+            onChange={(e) => handleFieldChange(field.id, e.target.value)}
+            required={field.required}
           />
         );
     }
@@ -461,301 +582,148 @@ export default function EditResponse() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-2xl">
-          <CardHeader>
+      <div className="container mx-auto p-6">
+        <div className="space-y-6">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-10 w-10 rounded" />
             <Skeleton className="h-8 w-48" />
-            <Skeleton className="h-4 w-64" />
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="space-y-2">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-10 w-full" />
-              </div>
-            ))}
-            <Skeleton className="h-10 w-full" />
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+          </div>
 
-  if (formNotFound || responseNotFound) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <Card className="w-full max-w-2xl">
-          <CardContent className="pt-6 text-center">
-            <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h2 className="text-xl font-semibold mb-2">
-              {formNotFound ? "Form Not Found" : "Response Not Found"}
-            </h2>
-            <p className="text-muted-foreground mb-4">
-              {formNotFound 
-                ? "The form doesn't exist or has been removed."
-                : "The response doesn't exist or has been removed."}
-            </p>
-            <Button onClick={() => navigate("/form")} variant="outline">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Forms List
-            </Button>
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader>
+              <Skeleton className="h-6 w-32" />
+              <Skeleton className="h-4 w-64" />
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="space-y-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-2xl mx-auto">
-        {/* Success State - Shows after saving */}
-        {isSaved ? (
-          <Card className="border-green-200 shadow-lg">
-            <CardContent className="pt-12 pb-12 text-center">
-              <div className="flex justify-center mb-6">
-                <div className="rounded-full bg-green-100 p-4">
-                  <CheckCircle className="h-16 w-16 text-green-600" />
+    <div className="container mx-auto p-6">
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center gap-4">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => handleNavigation(`/form/${formId}/responses`)}
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold">Edit Response</h1>
+            <p className="text-muted-foreground">
+              {formTitle} • Response ID: {responseId?.substring(0, 8)}...
+            </p>
+          </div>
+          
+          {hasChanges && (
+            <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+              Unsaved changes
+            </Badge>
+          )}
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Edit Response Details</CardTitle>
+            <CardDescription>
+              Make changes to the form response below
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              {formFields.map((field) => (
+                <div key={field.id} className="space-y-3">
+                  <Label htmlFor={field.id} className="flex items-center gap-2">
+                    {field.label}
+                    {field.required && (
+                      <span className="text-red-500">*</span>
+                    )}
+                    {field.type === 'relation' && field.relationConfig?.formTitle && (
+                      <Badge variant="outline" className="text-xs">
+                        {field.relationConfig.formTitle}
+                      </Badge>
+                    )}
+                  </Label>
+                  
+                  {renderFieldInput(field)}
+                  
+                  <div className="text-xs text-muted-foreground">
+                    Field type: {field.type}
+                    {field.placeholder && ` • ${field.placeholder}`}
+                  </div>
                 </div>
-              </div>
+              ))}
 
-              <h1 className="text-3xl font-bold mb-4 text-green-700">
-                Changes Saved!
-              </h1>
-
-              <p className="text-lg text-muted-foreground mb-2">
-                Response for <span className="font-semibold">{formTitle}</span> has been updated.
-              </p>
-
-              <p className="text-muted-foreground mb-8">
-                The response has been successfully updated in the database.
-              </p>
-
-              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <div className="flex justify-end gap-3 pt-4 border-t">
                 <Button
-                  onClick={handleEditAnother}
-                  size="lg"
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  <History className="w-5 h-5 mr-2" />
-                  Edit This Response Again
-                </Button>
-
-                <Button
-                  onClick={handleViewResponses}
+                  type="button"
                   variant="outline"
-                  size="lg"
+                  onClick={() => handleNavigation(`/form/${formId}/responses`)}
+                  disabled={saving}
                 >
-                  <ArrowLeft className="w-5 h-5 mr-2" />
-                  Back to Responses
+                  Cancel
                 </Button>
-              </div>
-
-              <div className="mt-8 pt-6 border-t">
-                <p className="text-sm text-muted-foreground">
-                  Response ID: {responseId?.substring(0, 8)}...
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <>
-            {/* Header */}
-            <div className="mb-8">
-              <div className="flex items-center gap-4 mb-4">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleViewResponses}
-                >
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  Back to Responses
-                </Button>
-                
-                {hasChanges && (
-                  <span className="text-sm text-amber-600 bg-amber-50 px-3 py-1 rounded-full">
-                    Unsaved changes
-                  </span>
-                )}
-              </div>
-              
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div>
-                  <h1 className="text-3xl font-bold mb-2">Edit Response</h1>
-                  <p className="text-muted-foreground">
-                    Update response for: <span className="font-semibold">{formTitle}</span>
-                  </p>
-                  {formDescription && (
-                    <p className="text-sm text-muted-foreground mt-1">{formDescription}</p>
+                <Button type="submit" disabled={saving}>
+                  {saving ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4 mr-2" />
+                      Save Changes
+                    </>
                   )}
-                </div>
-                
-                <div className="flex flex-col items-end gap-1">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Calendar className="w-4 h-4" />
-                    <span>Submitted: {formatDate(responseCreatedAt)}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <History className="w-4 h-4" />
-                    <span>Last updated: {formatDate(responseUpdatedAt)}</span>
-                  </div>
-                </div>
+                </Button>
               </div>
-              
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mt-4">
-                <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                <span>Response ID: {responseId?.substring(0, 12)}...</span>
-              </div>
-
-              {fields.length === 0 && (
-                <Alert className="mt-4">
-                  <AlertDescription>
-                    This form has no fields to edit.
-                  </AlertDescription>
-                </Alert>
-              )}
-            </div>
-
-            {/* Form - Only shows when NOT in saved state */}
-            {fields.length > 0 ? (
-              <Card className="mb-8">
-                <CardHeader>
-                  <CardTitle>Edit Response Data</CardTitle>
-                  <CardDescription>
-                    Update the response values below
-                  </CardDescription>
-                </CardHeader>
-
-                <form onSubmit={handleSave}>
-                  <CardContent className="pt-6">
-                    <div className="space-y-6">
-                      {fields.map((field: FormField) => (
-                        <div key={field.id} className="space-y-2">
-                          {/* Don't show label for checkbox in the same way */}
-                          {field.type !== "checkbox" && (
-                            <Label htmlFor={field.id}>
-                              {field.label}
-                              {field.required && (
-                                <span className="text-red-500 ml-1">*</span>
-                              )}
-                            </Label>
-                          )}
-
-                          {renderField(field)}
-
-                          {errors[field.id] && (
-                            <p className="text-sm text-red-500 flex items-center gap-1">
-                              <AlertCircle className="w-4 h-4" />
-                              {errors[field.id]}
-                            </p>
-                          )}
-
-                          {field.type === "email" && !errors[field.id] && (
-                            <p className="text-xs text-muted-foreground">
-                              We'll never share your email with anyone else.
-                            </p>
-                          )}
-
-                          {/* For checkbox fields, show label above if it's different from placeholder */}
-                          {field.type === "checkbox" &&
-                            field.placeholder !== field.label && (
-                              <Label
-                                htmlFor={field.id}
-                                className="text-base font-medium block mb-1"
-                              >
-                                {field.label}
-                                {field.required && (
-                                  <span className="text-red-500 ml-1">*</span>
-                                )}
-                              </Label>
-                            )}
-                        </div>
-                      ))}
-
-                      {/* Action Buttons */}
-                      <div className="pt-6 border-t">
-                        <div className="flex flex-col sm:flex-row gap-3">
-                          <Button
-                            type="submit"
-                            className="sm:flex-1"
-                            size="lg"
-                            disabled={saving || !hasChanges}
-                          >
-                            {saving ? (
-                              <>
-                                <RefreshCw className="w-5 h-5 mr-2 animate-spin" />
-                                Saving...
-                              </>
-                            ) : (
-                              <>
-                                <Save className="w-5 h-5 mr-2" />
-                                Save Changes
-                              </>
-                            )}
-                          </Button>
-                          
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="lg"
-                            onClick={() => {
-                              setFormData(originalData);
-                              setErrors({});
-                              toast.info("Changes discarded");
-                            }}
-                            disabled={!hasChanges}
-                          >
-                            Discard Changes
-                          </Button>
-                        </div>
-
-                        <div className="mt-3 text-center">
-                          <p className="text-xs text-muted-foreground">
-                            {fields.filter((f) => f.required).length > 0 ? (
-                              <>
-                                <span className="text-red-500">*</span> Required
-                                fields
-                                {" • "}
-                                {fields.filter((f) => f.required).length}{" "}
-                                required field(s)
-                              </>
-                            ) : (
-                              "All fields are optional"
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </form>
-              </Card>
-            ) : (
-              <Card>
-                <CardContent className="pt-6 text-center">
-                  <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">Empty Form</h3>
-                  <p className="text-muted-foreground mb-4">
-                    This form doesn't have any fields to edit.
-                  </p>
-                  <Button onClick={handleViewResponses} variant="outline">
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    Back to Responses
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Info Footer */}
-            <div className="mt-8 text-center">
-              <p className="text-sm text-muted-foreground">
-                Editing response in real-time • Changes are saved to the database
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Last updated: {formatDate(responseUpdatedAt)}
-              </p>
-            </div>
-          </>
-        )}
+            </form>
+          </CardContent>
+        </Card>
       </div>
+
+      {/* Unsaved Changes Dialog */}
+      <AlertDialog open={showUnsavedDialog} onOpenChange={setShowUnsavedDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <div className="flex items-center gap-2">
+              <div className="rounded-full bg-yellow-100 p-2">
+                <AlertTriangle className="h-5 w-5 text-yellow-600" />
+              </div>
+              <AlertDialogTitle>Unsaved Changes</AlertDialogTitle>
+            </div>
+            <AlertDialogDescription>
+              You have unsaved changes. Are you sure you want to leave? Your changes will be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setShowUnsavedDialog(false);
+              setNavigateTo(null);
+            }}>
+              Continue Editing
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmNavigation}
+              className="bg-yellow-600 text-white hover:bg-yellow-700"
+            >
+              Leave Without Saving
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
