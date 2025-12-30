@@ -452,12 +452,6 @@ export class GraphQLService {
         throw new Error(error.message);
       }
 
-      console.log("Filter results:", {
-        total: count,
-        returned: data?.length,
-        filtersApplied: Object.keys(filters).length,
-      });
-
       return {
         responses: data || [],
         total: count || 0,

@@ -135,8 +135,6 @@ export default function ResponsesIndex() {
       try {
         const formId = field.relationConfig!.formId!;
         const responses = await graphqlService.getFormResponses(formId);
-        console.log(responses);
-        
         
         // Parse the related form to get display field configuration
         const relatedForm = await graphqlService.getFormById(formId);
@@ -376,8 +374,6 @@ const getRelationDisplayValue = (field: FormField, value: string | undefined): s
           };
         }
       });
-
-      console.log("Active filters:", activeFilters); // Debug log
 
       // Fetch from Supabase with filters and pagination
       const result = await graphqlService.getFormResponsesWithFilters(
