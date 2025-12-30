@@ -151,8 +151,6 @@ export default function EditResponse() {
           responseData = {};
         }
 
-        console.log("Fetched response data:", responseData); // Debug log
-
         setFormData(responseData);
         setOriginalData(responseData);
 
