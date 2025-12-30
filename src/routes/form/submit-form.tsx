@@ -22,6 +22,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   ArrowLeft,
   CheckCircle,
@@ -29,6 +30,7 @@ import {
   RefreshCw,
   AlertCircle,
   PlusCircle,
+  Link,
 } from "lucide-react";
 import { toast } from "sonner";
 import { graphqlService } from "@/services/graphql.service";
@@ -39,7 +41,20 @@ interface FormField {
   label: string;
   required: boolean;
   placeholder?: string;
-  options?: string[]; // Added for select, radio, dropdown fields
+  options?: string[];
+  relationConfig?: {
+    formId?: string;
+    formTitle?: string;
+    displayField?: string;
+  };
+}
+
+interface RelatedResponse {
+  id: string;
+  data: Record<string, any>;
+  created_at: string;
+  displayValue: string;
+  formId: string; // The form ID that this response belongs to
 }
 
 export default function SubmitForm() {
@@ -55,8 +70,10 @@ export default function SubmitForm() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [formNotFound, setFormNotFound] = useState(false);
+  const [relatedResponses, setRelatedResponses] = useState<Record<string, RelatedResponse[]>>({});
+  const [loadingRelations, setLoadingRelations] = useState<Record<string, boolean>>({});
 
-  // Fetch form schema
+  // Fetch form schema and related data
   useEffect(() => {
     if (!id) {
       setFormNotFound(true);
@@ -83,7 +100,6 @@ export default function SubmitForm() {
         let parsedFields: FormField[] = [];
 
         try {
-          // Parse the schema - it might be stored as a string
           let schema = form.schema;
           if (typeof schema === "string") {
             schema = JSON.parse(schema);
@@ -106,11 +122,9 @@ export default function SubmitForm() {
             case "checkbox":
               initialData[field.id] = false;
               break;
-            case "number":
-              initialData[field.id] = "";
-              break;
             case "select":
             case "radio":
+            case "relation":
               initialData[field.id] = "";
               break;
             default:
@@ -118,6 +132,10 @@ export default function SubmitForm() {
           }
         });
         setFormData(initialData);
+
+        // Fetch related responses for relation fields
+        await fetchRelatedResponses(parsedFields);
+
       } catch (error: any) {
         console.error("Error fetching form:", error);
         toast.error(`Error loading form: ${error.message}`);
@@ -129,6 +147,108 @@ export default function SubmitForm() {
 
     fetchForm();
   }, [id]);
+
+const fetchRelatedResponses = async (fields: FormField[]) => {
+  const relationFields = fields.filter(f => f.type === 'relation' && f.relationConfig?.formId);
+  
+  for (const field of relationFields) {
+    setLoadingRelations(prev => ({ ...prev, [field.id]: true }));
+    
+    try {
+      const formId = field.relationConfig!.formId!;
+      const responses = await graphqlService.getFormResponses(formId);
+      
+      // Ensure responses is an array
+      if (!Array.isArray(responses)) {
+        console.error(`Expected array of responses for form ${formId}, got:`, responses);
+        setRelatedResponses(prev => ({
+          ...prev,
+          [field.id]: []
+        }));
+        continue;
+      }
+      
+      const formattedResponses = responses.map((response: any) => {
+        // Handle different response structures
+        const responseId = response.id || response._id || response.response_id || 
+                          `response_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        let data: Record<string, any> = {};
+        try {
+          // Try different possible locations for the data
+          if (response.data) {
+            data = typeof response.data === 'string' 
+              ? JSON.parse(response.data) 
+              : response.data;
+          } else if (response.values) {
+            data = typeof response.values === 'string'
+              ? JSON.parse(response.values)
+              : response.values;
+          } else if (response.response_data) {
+            data = typeof response.response_data === 'string'
+              ? JSON.parse(response.response_data)
+              : response.response_data;
+          } else {
+            // If no data field found, use the response object itself (excluding metadata)
+            const { id, _id, response_id, created_at, createdAt, updated_at, updatedAt, form_id, formId, ...rest } = response;
+            data = rest;
+          }
+        } catch (error) {
+          console.error("Error parsing response data:", error, response);
+          data = {};
+        }
+
+        // Get display value from the configured display field
+        let displayValue = `Response ${String(responseId).substring(0, 8)}...`;
+        
+        if (field.relationConfig?.displayField) {
+          const displayFieldValue = data[field.relationConfig.displayField];
+          if (displayFieldValue !== undefined && displayFieldValue !== null && displayFieldValue !== '') {
+            displayValue = String(displayFieldValue);
+          } else {
+            // Try to find any non-empty text field as fallback
+            const firstTextValue = Object.values(data).find(val => 
+              val !== undefined && val !== null && String(val).trim() !== ''
+            );
+            if (firstTextValue) {
+              const strValue = String(firstTextValue);
+              displayValue = strValue.length > 50 ? strValue.substring(0, 50) + '...' : strValue;
+            }
+          }
+        }
+
+        // Get created_at date
+        const createdAt = response.created_at || response.createdAt || response.submitted_at || 
+                         response.submittedAt || new Date().toISOString();
+
+        return {
+          id: responseId,
+          data: data,
+          created_at: createdAt,
+          displayValue,
+          formId: formId,
+        };
+      }).filter(response => response.id); // Filter out invalid responses
+
+      setRelatedResponses(prev => ({
+        ...prev,
+        [field.id]: formattedResponses
+      }));
+
+    } catch (error) {
+      console.error(`Error fetching related responses for field ${field.id}:`, error);
+      toast.error(`Failed to load related data for ${field.label}`);
+      
+      // Set empty array on error to prevent UI issues
+      setRelatedResponses(prev => ({
+        ...prev,
+        [field.id]: []
+      }));
+    } finally {
+      setLoadingRelations(prev => ({ ...prev, [field.id]: false }));
+    }
+  }
+};
 
   const handleInputChange = (fieldId: string, value: any) => {
     setFormData((prev) => ({
@@ -158,7 +278,7 @@ export default function SubmitForm() {
           if (!value) {
             newErrors[field.id] = `${field.label} is required`;
           }
-        } else if (field.type === "select" || field.type === "radio") {
+        } else if (field.type === "select" || field.type === "radio" || field.type === "relation") {
           if (!value || value.toString().trim() === "") {
             newErrors[field.id] = `Please select an option for ${field.label}`;
           }
@@ -179,6 +299,16 @@ export default function SubmitForm() {
       if (field.type === "number" && value && value.trim() !== "") {
         if (isNaN(Number(value))) {
           newErrors[field.id] = "Please enter a valid number";
+        }
+      }
+
+      // Relation validation
+      if (field.type === "relation" && field.required && value) {
+        // Ensure the selected value is a valid form ID
+        const responses = relatedResponses[field.id] || [];
+        const selectedResponse = responses.find(r => r.id === value);
+        if (!selectedResponse) {
+          newErrors[field.id] = "Please select a valid option";
         }
       }
     });
@@ -202,7 +332,24 @@ export default function SubmitForm() {
 
     setSubmitting(true);
     try {
-      const result = await graphqlService.submitFormResponse(id, formData);
+      // Process form data before submission
+      const processedData = { ...formData };
+      
+      // Convert relation field values from response ID to form ID
+      fields.forEach(field => {
+        if (field.type === 'relation' && processedData[field.id]) {
+          const responseId = processedData[field.id];
+          const responses = relatedResponses[field.id] || [];
+          const selectedResponse = responses.find(r => r.id === responseId);
+          
+          if (selectedResponse) {
+            // Store the form ID instead of the response ID
+            processedData[field.id] = selectedResponse.formId;
+          }
+        }
+      });
+
+      const result = await graphqlService.submitFormResponse(id, processedData);
 
       if (result) {
         setIsSubmitted(true);
@@ -231,6 +378,7 @@ export default function SubmitForm() {
           break;
         case "select":
         case "radio":
+        case "relation":
           resetData[field.id] = "";
           break;
         default:
@@ -248,6 +396,7 @@ export default function SubmitForm() {
     const fieldError = errors[field.id];
     const isRequired = field.required;
     const fieldValue = formData[field.id] || "";
+    const isLoading = loadingRelations[field.id];
 
     const baseProps = {
       id: field.id,
@@ -270,7 +419,6 @@ export default function SubmitForm() {
         );
 
       case "select":
-        // Ensure options is an array and not empty
         const hasOptions = field.options && field.options.length > 0;
 
         return (
@@ -292,7 +440,7 @@ export default function SubmitForm() {
             </SelectTrigger>
             {hasOptions && (
               <SelectContent>
-                {field.options.map((option, index) => (
+                {field.options!.map((option, index) => (
                   <SelectItem key={index} value={option}>
                     {option}
                   </SelectItem>
@@ -300,6 +448,49 @@ export default function SubmitForm() {
               </SelectContent>
             )}
           </Select>
+        );
+
+      case "relation":
+        const responses = relatedResponses[field.id] || [];
+        const hasResponses = responses.length > 0;
+        const formTitle = field.relationConfig?.formTitle || "Related Form";
+        
+        return (
+          <div className="space-y-2">
+            <SearchableSelect
+              value={fieldValue}
+              onValueChange={(value) => handleInputChange(field.id, value)}
+              options={responses.map(response => ({
+                value: response.id, // Use response ID as value for selection
+                label: response.displayValue,
+                description: `Submitted ${new Date(response.created_at).toLocaleDateString()}`
+              }))}
+              placeholder={
+                isLoading
+                  ? "Loading options..."
+                  : hasResponses 
+                    ? field.placeholder || `Select from ${formTitle}`
+                    : "No responses available"
+              }
+              disabled={isLoading || !hasResponses}
+              className={fieldError ? "border-red-500" : ""}
+              emptyMessage="No responses found in related form"
+            />
+            {field.relationConfig?.formTitle && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Link className="w-3 h-3" />
+                <span>Linked to: {field.relationConfig.formTitle}</span>
+                {field.required && (
+                  <span className="text-red-500 ml-1">*</span>
+                )}
+              </div>
+            )}
+            {!isLoading && hasResponses && (
+              <p className="text-xs text-muted-foreground">
+                Selecting an option will create a relation to {formTitle}
+              </p>
+            )}
+          </div>
         );
 
       case "radio":
@@ -410,6 +601,7 @@ export default function SubmitForm() {
         );
     }
   };
+
 
   if (loading) {
     return (
