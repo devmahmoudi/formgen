@@ -53,6 +53,7 @@ import {
   X,
   AlertTriangle,
   Pencil,
+  Link,
 } from "lucide-react";
 import { toast } from "sonner";
 import { graphqlService } from "@/services/graphql.service";
@@ -63,7 +64,12 @@ interface FormField {
   label: string;
   required: boolean;
   placeholder?: string;
-  options?: string[]; // For select, radio, dropdown
+  options?: string[];
+  relationConfig?: {
+    formId?: string;
+    formTitle?: string;
+    displayField?: string;
+  };
 }
 
 interface FormResponse {
@@ -72,6 +78,15 @@ interface FormResponse {
   data: Record<string, any>;
   created_at: string;
   updated_at?: string;
+}
+
+interface RelatedFormData {
+  [formId: string]: {
+    [responseId: string]: {
+      displayValue: string;
+      data: Record<string, any>;
+    };
+  };
 }
 
 interface FilterState {
@@ -93,6 +108,8 @@ export default function ResponsesIndex() {
   const [filters, setFilters] = useState<FilterState>({});
   const [searchTerm, setSearchTerm] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [relatedFormData, setRelatedFormData] = useState<RelatedFormData>({});
+  const [loadingRelations, setLoadingRelations] = useState<Record<string, boolean>>({});
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -108,21 +125,127 @@ export default function ResponsesIndex() {
     identifier: string;
   } | null>(null);
 
+  // Fetch related form data for relation fields
+  const fetchRelatedFormData = async (fields: FormField[]) => {
+    const relationFields = fields.filter(f => f.type === 'relation' && f.relationConfig?.formId);
+    
+    for (const field of relationFields) {
+      setLoadingRelations(prev => ({ ...prev, [field.id]: true }));
+      
+      try {
+        const formId = field.relationConfig!.formId!;
+        const responses = await graphqlService.getFormResponses(formId);
+        
+        // Parse the related form to get display field configuration
+        const relatedForm = await graphqlService.getFormById(formId);
+        let relatedFormFields: FormField[] = [];
+        
+        if (relatedForm && relatedForm.schema) {
+          try {
+            let schema = relatedForm.schema;
+            if (typeof schema === 'string') {
+              schema = JSON.parse(schema);
+            }
+            if (schema && schema.fields) {
+              relatedFormFields = schema.fields;
+            }
+          } catch (error) {
+            console.error("Error parsing related form schema:", error);
+          }
+        }
+        
+        // Create a mapping of response ID to display value
+        const formData: RelatedFormData[string] = {};
+        
+        responses.forEach((response: any) => {
+          let data: Record<string, any> = {};
+          try {
+            data = typeof response.data === 'string' 
+              ? JSON.parse(response.data) 
+              : response.data;
+          } catch (error) {
+            console.error("Error parsing related response data:", error);
+          }
+
+          // Get display value
+          let displayValue = `Response ${response.id?.substring?.(0, 8) || 'Unknown'}...`;
+          
+          if (field.relationConfig?.displayField && data[field.relationConfig.displayField]) {
+            displayValue = String(data[field.relationConfig.displayField]);
+          } else {
+            // Fallback: find any text field
+            const textField = relatedFormFields.find(f => 
+              ['text', 'email', 'textarea'].includes(f.type)
+            );
+            if (textField && data[textField.id]) {
+              displayValue = String(data[textField.id]);
+            }
+          }
+          
+          formData[response.id] = {
+            displayValue,
+            data
+          };
+        });
+
+        setRelatedFormData(prev => ({
+          ...prev,
+          [formId]: formData
+        }));
+        
+      } catch (error) {
+        console.error(`Error fetching related form data for field ${field.id}:`, error);
+      } finally {
+        setLoadingRelations(prev => ({ ...prev, [field.id]: false }));
+      }
+    }
+  };
+
+// Get display value for a relation field
+const getRelationDisplayValue = (field: FormField, value: string | undefined): string => {
+  if (!value) return "Not selected";
+  
+  // Check if this is a form ID instead of a response ID
+  // If it looks like a numeric ID (form ID), we need to find the actual response
+  if (field.relationConfig?.formId) {
+    const formData = relatedFormData[field.relationConfig.formId];
+    if (!formData) return `Loading... (Form: ${field.relationConfig.formId})`;
+    
+    // The value should be a response ID from the related form
+    const responseData = formData[value];
+    
+    if (responseData) {
+      return responseData.displayValue;
+    }
+    
+    // If we can't find by response ID, fall back to the first response
+    const firstResponse = Object.values(formData)[0];
+    if (firstResponse) {
+      return firstResponse.displayValue;
+    }
+    
+    return `Response: ${value.substring(0, 8)}...`;
+  }
+  
+  return `Form: ${value}`;
+};
+
   // Get implicit operator based on field type
   const getImplicitOperator = (fieldType: string): string => {
     switch (fieldType) {
       case "text":
       case "email":
       case "textarea":
-        return "contains"; // Text fields use "contains" for partial matching
+        return "contains";
       case "checkbox":
-        return "isTrue"; // Checkboxes use "isTrue" for filtering
+        return "isTrue";
       case "select":
       case "radio":
       case "dropdown":
-        return "equals"; // Selection fields use exact matching
+      case "relation":
+        return "equals";
       default:
-        return "equals"; // All other fields use exact matching
+        return "equals";
     }
   };
 
@@ -156,6 +279,9 @@ export default function ResponsesIndex() {
           console.error("Error parsing schema:", error);
         }
         setFormFields(parsedFields);
+
+        // Fetch related form data for relation fields
+        await fetchRelatedFormData(parsedFields);
 
         // Initialize filters for each field
         const initialFilters: FilterState = {};
@@ -236,7 +362,8 @@ export default function ResponsesIndex() {
           if (
             filter.type === "select" ||
             filter.type === "radio" ||
-            filter.type === "dropdown"
+            filter.type === "dropdown" ||
+            filter.type === "relation"
           ) {
             operator = "equals";
           }
@@ -247,8 +374,6 @@ export default function ResponsesIndex() {
           };
         }
       });
-
-      console.log("Active filters:", activeFilters); // Debug log
 
       // Fetch from Supabase with filters and pagination
       const result = await graphqlService.getFormResponsesWithFilters(
@@ -338,13 +463,37 @@ export default function ResponsesIndex() {
               <SelectValue placeholder="All" />
             </SelectTrigger>
             <SelectContent>
-              {/* Fix: Use a placeholder item with a non-empty value */}
               <SelectItem value="__all__">All</SelectItem>
               {field.options?.map((option) => (
                 <SelectItem key={option} value={option}>
                   {option}
                 </SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+        );
+
+      case "relation":
+        return (
+          <Select
+            value={filter.value || ""}
+            onValueChange={(value) => handleFilterChange(field.id, value)}
+            disabled={loadingRelations[field.id]}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue 
+                placeholder={loadingRelations[field.id] ? "Loading..." : "All"} 
+              />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">All</SelectItem>
+              {field.relationConfig?.formId && relatedFormData[field.relationConfig.formId] && 
+                Object.entries(relatedFormData[field.relationConfig.formId]).map(([responseId, data]) => (
+                  <SelectItem key={responseId} value={responseId}>
+                    {data.displayValue}
+                  </SelectItem>
+                ))
+              }
             </SelectContent>
           </Select>
         );
@@ -454,6 +603,16 @@ export default function ResponsesIndex() {
         const date = new Date(response.created_at).toLocaleString();
         const fieldValues = formFields.map((field) => {
           const value = response.data[field.id];
+          
+          // Handle relation fields specially
+          if (field.type === 'relation' && value) {
+            const displayValue = getRelationDisplayValue(field, value);
+            if (displayValue.includes("Loading")) {
+              return value; // Fall back to form ID if not loaded yet
+            }
+            return displayValue;
+          }
+          
           if (value === null || value === undefined) return "";
           const stringValue = String(value);
           // Escape quotes and wrap in quotes if contains comma or newline
@@ -507,7 +666,6 @@ export default function ResponsesIndex() {
   };
 
   // Render table actions cell
-  // Update the renderActionsCell function in ResponsesIndex.tsx
   const renderActionsCell = (response: FormResponse) => {
     const isDeleting = deletingId === response.id;
 
@@ -518,7 +676,6 @@ export default function ResponsesIndex() {
             variant="ghost"
             size="icon"
             onClick={() => {
-              // Navigate to show response page
               navigate(`/form/${formId}/responses/show/${response.id}`);
             }}
             title="View response details"
@@ -531,7 +688,6 @@ export default function ResponsesIndex() {
             variant="ghost"
             size="icon"
             onClick={() => {
-              // Navigate to edit response page
               navigate(`/form/${formId}/responses/edit/${response.id}`);
             }}
             title="Edit response"
@@ -557,6 +713,68 @@ export default function ResponsesIndex() {
         </div>
       </TableCell>
     );
+  };
+
+  // Render cell content based on field type
+  const renderTableCell = (field: FormField, value: any) => {
+    if (value === null || value === undefined) {
+      return "-";
+    }
+
+    switch (field.type) {
+      case "checkbox":
+        return value ? (
+          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+            ✓ Yes
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+            ✗ No
+          </Badge>
+        );
+
+      case "email":
+        return (
+          <a
+            href={`mailto:${value}`}
+            className="text-primary hover:underline flex items-center gap-1"
+          >
+            {value}
+          </a>
+        );
+
+      case "date":
+        try {
+          return new Date(value).toLocaleDateString();
+        } catch {
+          return String(value);
+        }
+
+      case "relation":
+        const isLoading = loadingRelations[field.id];
+        const displayValue = getRelationDisplayValue(field, value);
+        
+        return (
+          <div className="flex items-center gap-2">
+            <Link className="w-3 h-3 text-muted-foreground" />
+            {isLoading ? (
+              <span className="text-muted-foreground text-sm italic">
+                Loading...
+              </span>
+            ) : (
+              <span>{displayValue}</span>
+            )}
+            {field.relationConfig?.formTitle && (
+              <Badge variant="outline" className="text-xs">
+                {field.relationConfig.formTitle}
+              </Badge>
+            )}
+          </div>
+        );
+
+      default:
+        return String(value);
+    }
   };
 
   if (loading && !responses.length) {
@@ -803,7 +1021,16 @@ export default function ResponsesIndex() {
                     <TableRow>
                       <TableHead className="w-40">Submitted At</TableHead>
                       {formFields.map((field) => (
-                        <TableHead key={field.id}>{field.label}</TableHead>
+                        <TableHead key={field.id}>
+                          <div className="flex items-center gap-1">
+                            {field.label}
+                            {field.type === 'relation' && field.relationConfig?.formTitle && (
+                              <Badge variant="outline" className="text-xs">
+                                {field.relationConfig.formTitle}
+                              </Badge>
+                            )}
+                          </div>
+                        </TableHead>
                       ))}
                       <TableHead className="w-28">Actions</TableHead>
                     </TableRow>
@@ -816,36 +1043,9 @@ export default function ResponsesIndex() {
                         </TableCell>
                         {formFields.map((field) => {
                           const value = response.data[field.id];
-                          let displayValue = "";
-
-                          if (value === null || value === undefined) {
-                            displayValue = "-";
-                          } else if (field.type === "checkbox") {
-                            displayValue = value ? "✓ Yes" : "✗ No";
-                          } else if (field.type === "email") {
-                            displayValue = (
-                              <a
-                                href={`mailto:${value}`}
-                                className="text-primary hover:underline"
-                              >
-                                {value}
-                              </a>
-                            );
-                          } else if (field.type === "date") {
-                            try {
-                              displayValue = new Date(
-                                value
-                              ).toLocaleDateString();
-                            } catch {
-                              displayValue = String(value);
-                            }
-                          } else {
-                            displayValue = String(value);
-                          }
-
                           return (
                             <TableCell key={`${response.id}-${field.id}`}>
-                              {displayValue}
+                              {renderTableCell(field, value)}
                             </TableCell>
                           );
                         })}
