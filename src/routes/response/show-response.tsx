@@ -28,6 +28,8 @@ import {
   ChevronRight,
   Pencil,
   Trash2,
+  Link,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { graphqlService } from "@/services/graphql.service";
@@ -40,6 +42,20 @@ interface FormField {
   required: boolean;
   placeholder?: string;
   options?: string[];
+  relationConfig?: {
+    formId?: string;
+    formTitle?: string;
+    displayField?: string;
+  };
+}
+
+interface RelatedFormData {
+  [formId: string]: {
+    [responseId: string]: {
+      displayValue: string;
+      data: Record<string, any>;
+    };
+  };
 }
 
 interface FieldValueDisplay {
@@ -48,6 +64,7 @@ interface FieldValueDisplay {
   type: string;
   icon: React.ReactNode;
   formattedValue: string;
+  field: FormField;
 }
 
 export default function ShowResponse() {
@@ -64,6 +81,10 @@ export default function ShowResponse() {
   const [responseCreatedAt, setResponseCreatedAt] = useState("");
   const [responseUpdatedAt, setResponseUpdatedAt] = useState("");
   const [fieldValues, setFieldValues] = useState<FieldValueDisplay[]>([]);
+  
+  // Relation field data
+  const [relatedFormData, setRelatedFormData] = useState<RelatedFormData>({});
+  const [loadingRelations, setLoadingRelations] = useState(false);
 
   // Fetch form schema and response data
   useEffect(() => {
@@ -139,7 +160,7 @@ export default function ShowResponse() {
 
         setResponseData(data);
 
-        // Prepare field values for display
+        // Prepare initial field values for display
         const displayValues: FieldValueDisplay[] = parsedFields.map((field) => {
           const value = data[field.id];
           let formattedValue = "";
@@ -176,6 +197,10 @@ export default function ShowResponse() {
               formattedValue = value ? new Date(value).toLocaleDateString() : "Not provided";
               icon = <Calendar className="w-4 h-4" />;
               break;
+            case "relation":
+              formattedValue = value || "Not selected";
+              icon = <Link className="w-4 h-4" />;
+              break;
             default:
               formattedValue = value || "Not provided";
           }
@@ -186,10 +211,14 @@ export default function ShowResponse() {
             type: field.type,
             icon,
             formattedValue,
+            field
           };
         });
 
         setFieldValues(displayValues);
+
+        // Fetch related form data for relation fields
+        await fetchRelatedFormData(parsedFields, data);
 
       } catch (error: any) {
         console.error("Error fetching data:", error);
@@ -202,6 +231,125 @@ export default function ShowResponse() {
 
     fetchData();
   }, [formId, responseId]);
+
+  // Fetch related form data for relation fields
+  const fetchRelatedFormData = async (fields: FormField[], currentData: Record<string, any>) => {
+    const relationFields = fields.filter(f => f.type === 'relation' && f.relationConfig?.formId);
+    
+    if (relationFields.length === 0) return;
+    
+    setLoadingRelations(true);
+    
+    try {
+      const newRelatedFormData: RelatedFormData = {};
+      
+      for (const field of relationFields) {
+        const relatedFormId = field.relationConfig!.formId!;
+        
+        // Only fetch if we haven't already fetched this form's data
+        if (!newRelatedFormData[relatedFormId]) {
+          const responses = await graphqlService.getFormResponses(relatedFormId);
+          
+          // Parse the related form to get display field configuration
+          const relatedForm = await graphqlService.getFormById(relatedFormId);
+          let relatedFormFields: FormField[] = [];
+          
+          if (relatedForm && relatedForm.schema) {
+            try {
+              let schema = relatedForm.schema;
+              if (typeof schema === 'string') {
+                schema = JSON.parse(schema);
+              }
+              if (schema && schema.fields) {
+                relatedFormFields = schema.fields;
+              }
+            } catch (error) {
+              console.error("Error parsing related form schema:", error);
+            }
+          }
+          
+          // Create a mapping of response ID to display value
+          const formData: RelatedFormData[string] = {};
+          
+          responses.forEach((response: any) => {
+            let data: Record<string, any> = {};
+            try {
+              data = typeof response.data === 'string' 
+                ? JSON.parse(response.data) 
+                : response.data;
+            } catch (error) {
+              console.error("Error parsing related response data:", error);
+            }
+
+            // Get display value
+            let displayValue = `Response ${response.id?.substring?.(0, 8) || 'Unknown'}...`;
+            
+            if (field.relationConfig?.displayField && data[field.relationConfig.displayField]) {
+              displayValue = String(data[field.relationConfig.displayField]);
+            } else {
+              // Fallback: find any text field
+              const textField = relatedFormFields.find(f => 
+                ['text', 'email', 'textarea'].includes(f.type)
+              );
+              if (textField && data[textField.id]) {
+                displayValue = String(data[textField.id]);
+              }
+            }
+            
+            formData[response.id] = {
+              displayValue,
+              data
+            };
+          });
+
+          newRelatedFormData[relatedFormId] = formData;
+        }
+      }
+      
+      setRelatedFormData(newRelatedFormData);
+      
+      // Update field values with relation display values
+      setFieldValues(prev => prev.map(fieldValue => {
+        if (fieldValue.type === 'relation' && fieldValue.value && fieldValue.field.relationConfig?.formId) {
+          const relatedFormId = fieldValue.field.relationConfig.formId;
+          const formData = newRelatedFormData[relatedFormId];
+          
+          if (formData && formData[fieldValue.value]) {
+            return {
+              ...fieldValue,
+              formattedValue: formData[fieldValue.value].displayValue
+            };
+          }
+        }
+        return fieldValue;
+      }));
+      
+    } catch (error) {
+      console.error("Error fetching related form data:", error);
+    } finally {
+      setLoadingRelations(false);
+    }
+  };
+
+  // Get display value for a relation field
+  const getRelationDisplayValue = (field: FormField, value: string | undefined): string => {
+    if (!value) return "Not selected";
+    
+    if (field.relationConfig?.formId) {
+      const formData = relatedFormData[field.relationConfig.formId];
+      if (!formData) return `Loading... (ID: ${value.substring(0, 8)}...)`;
+      
+      const responseData = formData[value];
+      
+      if (responseData) {
+        return responseData.displayValue;
+      }
+      
+      return `ID: ${value.substring(0, 8)}...`;
+    }
+    
+    return `ID: ${value.substring(0, 8)}...`;
+  };
 
   const handleCopyToClipboard = () => {
     const textToCopy = JSON.stringify(responseData, null, 2);
@@ -274,6 +422,42 @@ export default function ShowResponse() {
             {field.value}
           </div>
         );
+      case "relation":
+        const displayValue = getRelationDisplayValue(field.field, field.value);
+        const isLoading = displayValue.includes("Loading");
+        
+        return (
+          <div className="flex items-center gap-2">
+            {isLoading ? (
+              <span className="text-muted-foreground italic">{displayValue}</span>
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <Link className="w-4 h-4 text-muted-foreground" />
+                  <span className="font-medium">{displayValue}</span>
+                </div>
+                {field.field.relationConfig?.formId && (
+                  <Badge variant="outline" className="text-xs">
+                    {field.field.relationConfig.formTitle || "Related Form"}
+                  </Badge>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2"
+                  onClick={() => {
+                    if (field.field.relationConfig?.formId) {
+                      navigate(`/form/${field.field.relationConfig.formId}/responses/show/${field.value}`);
+                    }
+                  }}
+                  disabled={isLoading}
+                >
+                  <ExternalLink className="w-3 h-3" />
+                </Button>
+              </>
+            )}
+          </div>
+        );
       default:
         return <span className="font-medium">{field.formattedValue}</span>;
     }
@@ -290,6 +474,7 @@ export default function ShowResponse() {
       case "radio": return <Radio className="w-4 h-4" />;
       case "checkbox": return <CheckSquare className="w-4 h-4" />;
       case "date": return <Calendar className="w-4 h-4" />;
+      case "relation": return <Link className="w-4 h-4" />;
       default: return <Type className="w-4 h-4" />;
     }
   };
@@ -469,19 +654,22 @@ export default function ShowResponse() {
             ) : (
               <div className="space-y-6">
                 {fieldValues.map((field, index) => (
-                  <div key={field.label} className="space-y-2">
+                  <div key={`${field.label}-${index}`} className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         {getIconForType(field.type)}
                         <Label className="text-sm font-medium">
                           {field.label}
                         </Label>
-                        {fields.find(f => f.label === field.label)?.required && (
+                        {field.field.required && (
                           <span className="text-xs text-red-500">*</span>
                         )}
                       </div>
                       <Badge variant="outline" className="text-xs">
                         {field.type}
+                        {field.type === 'relation' && field.field.relationConfig?.formTitle && (
+                          <span className="ml-1">({field.field.relationConfig.formTitle})</span>
+                        )}
                       </Badge>
                     </div>
                     
