@@ -52,6 +52,7 @@ import {
   Trash2,
   X,
   AlertTriangle,
+  Pencil 
 } from "lucide-react";
 import { toast } from "sonner";
 import { graphqlService } from "@/services/graphql.service";
@@ -510,9 +511,22 @@ export default function ResponsesIndex() {
     const isDeleting = deletingId === response.id;
 
     return (
-      <TableCell className="w-28">
+      <TableCell className="w-36">
         <div className="flex gap-1">
-          {/* <Button
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              // Navigate to edit response page
+              navigate(`/form/${formId}/responses/edit/${response.id}`);
+            }}
+            title="Edit response"
+            className="h-8 w-8"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </Button>
+
+          <Button
             variant="ghost"
             size="icon"
             onClick={() => {
@@ -522,7 +536,7 @@ export default function ResponsesIndex() {
             className="h-8 w-8"
           >
             <Eye className="w-3.5 h-3.5" />
-          </Button> */}
+          </Button>
 
           <Button
             variant="ghost"
@@ -842,7 +856,6 @@ export default function ResponsesIndex() {
             )}
           </CardContent>
         </Card>
-
       </div>
 
       {/* Delete Confirmation Dialog */}

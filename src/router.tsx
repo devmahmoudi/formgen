@@ -9,8 +9,9 @@ import NotFoundPage from "./routes/not-found";
 import FormGenerator from "./routes/form/form-generator";
 import FormList from "./routes/form/form-list";
 import SubmitForm from "./routes/form/submit-form";
-import ResponsesIndex from "./routes/response/responses-index";
 import EditForm from "./routes/form/edit-form";
+import ResponsesIndex from "./routes/response/responses-index";
+import EditResponse from "./routes/response/edit-response";
 
 export const router = createBrowserRouter([
   {
@@ -45,16 +46,16 @@ export const router = createBrowserRouter([
     children: [
       {
         path: "generator",
-        element: <FormGenerator/>
+        element: <FormGenerator />,
       },
       {
         path: "submit/:id",
-        element: <SubmitForm/>
+        element: <SubmitForm />,
       },
       {
         index: true,
         path: "",
-        element: <FormList/>
+        element: <FormList />,
       },
       {
         path: "edit/:formId",
@@ -63,7 +64,11 @@ export const router = createBrowserRouter([
       {
         path: ":formId/responses",
         element: <ResponsesIndex />,
-      }
-    ]
+      },
+      {
+        path: ":formId/responses/edit/:responseId",
+        element: <EditResponse />,
+      },
+    ],
   },
 ]);
