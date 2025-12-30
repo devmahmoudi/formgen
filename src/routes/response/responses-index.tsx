@@ -135,6 +135,8 @@ export default function ResponsesIndex() {
       try {
         const formId = field.relationConfig!.formId!;
         const responses = await graphqlService.getFormResponses(formId);
+        console.log(responses);
+        
         
         // Parse the related form to get display field configuration
         const relatedForm = await graphqlService.getFormById(formId);
@@ -166,7 +168,7 @@ export default function ResponsesIndex() {
           } catch (error) {
             console.error("Error parsing related response data:", error);
           }
-          
+
           // Get display value
           let displayValue = `Response ${response.id?.substring?.(0, 8) || 'Unknown'}...`;
           
@@ -187,7 +189,7 @@ export default function ResponsesIndex() {
             data
           };
         });
-        
+
         setRelatedFormData(prev => ({
           ...prev,
           [formId]: formData
@@ -201,30 +203,34 @@ export default function ResponsesIndex() {
     }
   };
 
-  // Get display value for a relation field
-  const getRelationDisplayValue = (field: FormField, formId: string | undefined): string => {
-    if (!formId) return "Not selected";
+// Get display value for a relation field
+const getRelationDisplayValue = (field: FormField, value: string | undefined): string => {
+  if (!value) return "Not selected";
+  
+  // Check if this is a form ID instead of a response ID
+  // If it looks like a numeric ID (form ID), we need to find the actual response
+  if (field.relationConfig?.formId) {
+    const formData = relatedFormData[field.relationConfig.formId];
+    if (!formData) return `Loading... (Form: ${field.relationConfig.formId})`;
     
-    const formData = relatedFormData[formId];
-    if (!formData) return `Loading... (Form: ${formId})`;
+    // The value should be a response ID from the related form
+    const responseData = formData[value];
     
-    // Find the response with this form ID (since we store form IDs in relation fields)
-    const responseEntry = Object.entries(formData).find(([_, data]) => 
-      data.data && Object.values(data.data).some(val => val === formId)
-    );
-    
-    if (responseEntry) {
-      return responseEntry[1].displayValue;
+    if (responseData) {
+      return responseData.displayValue;
     }
     
-    // If we can't find by form ID, try to find any response
+    // If we can't find by response ID, fall back to the first response
     const firstResponse = Object.values(formData)[0];
     if (firstResponse) {
       return firstResponse.displayValue;
     }
     
-    return `Form: ${formId}`;
-  };
+    return `Response: ${value.substring(0, 8)}...`;
+  }
+  
+  return `Form: ${value}`;
+};
 
   // Get implicit operator based on field type
   const getImplicitOperator = (fieldType: string): string => {
