@@ -170,9 +170,6 @@ export default function HomePage() {
                 >
                   Sign Out
                 </Button>
-                <Link to="/" className="flex-1">
-                  <Button className="w-full">Go to Home</Button>
-                </Link>
               </div>
             </CardContent>
           </Card>
