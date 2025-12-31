@@ -670,9 +670,9 @@ export default function SubmitForm() {
             <p className="text-muted-foreground mb-4">
               The form you're looking for doesn't exist or has been removed.
             </p>
-            <Button onClick={() => navigate("/form")} variant="outline">
+            <Button onClick={() => navigate(`/form/${formData.id}/responses`)} variant="outline">
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Forms List
+              Back to Responses List
             </Button>
           </CardContent>
         </Card>
@@ -741,11 +741,11 @@ export default function SubmitForm() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => navigate("/form")}
+                onClick={() => navigate(`/form/${id}/responses`)}
                 className="mb-4"
               >
                 <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Forms
+                Back to Responses List
               </Button>
 
               <h1 className="text-3xl font-bold mb-2">{formTitle}</h1>
