@@ -1,26 +1,51 @@
 import { Moon, Sun, Menu, X } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTheme } from "./theme-provider";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "react-router-dom";
+import { createClient } from "@supabase/supabase-js";
+
+// Initialize Supabase client
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
 
 export default function Navbar() {
   const { theme, setTheme } = useTheme();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
   const location = useLocation();
+
+  // Check for existing session on mount
+  useEffect(() => {
+    const checkSession = async () => {
+      setLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      setSession(session);
+      setLoading(false);
+    };
+
+    checkSession();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
   };
 
-  const navItems = [
+  // Navigation items - only show when user is logged in
+  const navItems = session ? [
     { label: "Home", href: "/" },
     { label: "Forms", href: "/form" },
-    // { label: "Form Renderer", href: "/form/renderer" },
-    // { label: "About", href: "/about" },
-    // { label: "Services", href: "/services" },
-    // { label: "Contact", href: "/contact" },
-  ];
+  ] : [];
 
   const isActive = (path: string) => {
     return location.pathname === path;
@@ -35,26 +60,28 @@ export default function Navbar() {
             <div className="text-xl font-bold text-primary">Logo</div>
           </Link>
 
-          {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-6">
-            {navItems.map((item) => (
-              <Link
-                key={item.label}
-                to={item.href}
-                className={`text-sm font-medium transition-colors ${
-                  isActive(item.href)
-                    ? "text-primary"
-                    : "text-muted-foreground hover:text-primary"
-                }`}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </div>
+          {/* Desktop Navigation - Only show when logged in */}
+          {session && (
+            <div className="hidden md:flex items-center space-x-6">
+              {navItems.map((item) => (
+                <Link
+                  key={item.label}
+                  to={item.href}
+                  className={`text-sm font-medium transition-colors ${
+                    isActive(item.href)
+                      ? "text-primary"
+                      : "text-muted-foreground hover:text-primary"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          )}
 
           {/* Right side buttons */}
           <div className="flex items-center space-x-4">
-            {/* Theme Toggle */}
+            {/* Theme Toggle - Always visible */}
             <Button
               variant="ghost"
               size="icon"
@@ -66,25 +93,27 @@ export default function Navbar() {
               <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
             </Button>
 
-            {/* Mobile menu button */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="md:hidden"
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-              aria-label="Toggle menu"
-            >
-              {isMenuOpen ? (
-                <X className="h-5 w-5" />
-              ) : (
-                <Menu className="h-5 w-5" />
-              )}
-            </Button>
+            {/* Mobile menu button - Only show when logged in and nav items exist */}
+            {session && navItems.length > 0 && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="md:hidden"
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                aria-label="Toggle menu"
+              >
+                {isMenuOpen ? (
+                  <X className="h-5 w-5" />
+                ) : (
+                  <Menu className="h-5 w-5" />
+                )}
+              </Button>
+            )}
           </div>
         </div>
 
-        {/* Mobile Menu */}
-        {isMenuOpen && (
+        {/* Mobile Menu - Only show when logged in */}
+        {isMenuOpen && session && (
           <div className="md:hidden border-t border-gray-800 py-4">
             <div className="flex flex-col space-y-4">
               {navItems.map((item) => (
