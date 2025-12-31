@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Checkout with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - name: Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npx -p semantic-release@25 \
+              -p @semantic-release/commit-analyzer \
+              -p @semantic-release/release-notes-generator \
+              -p @semantic-release/changelog \
+              -p @semantic-release/github \
+              -p @semantic-release/git \
+              semantic-release --no-ci
+      - name: Done
+        run: |
+          echo "GitHub Release and tag created successfully!"
