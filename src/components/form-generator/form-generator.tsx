@@ -17,16 +17,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import FieldItem from "./field-item";
-import { Plus, Copy, Download, Save, RefreshCw } from "lucide-react";
+import { Plus, Copy, Download, Save, RefreshCw, Link } from "lucide-react";
 import { toast } from "sonner";
 import { supabaseService } from "@/services/supabase.service";
-import type { FormSchema, FormField, FieldType } from "./types";
-import { Link } from "react-router-dom";
+import type { FormSchema, FormField } from "./types";
 
 // Export types for external use
-export type { FormSchema, FormField, FieldType };
+export type { FormSchema, FormField };
 
 export default function FormGenerator() {
   const [form, setForm] = useState<FormSchema>({
@@ -132,14 +130,13 @@ export default function FormGenerator() {
       const formData = {
         title: form.title,
         description: form.description || null,
-        schema: JSON.stringify(form), // Store the complete form schema
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        schema: form, // Store the complete form schema directly as JSON
       };
 
       console.log("Saving form data:", formData);
 
-      const result = await graphqlService.createForm(formData);
+      // Changed from graphqlService.createForm() to supabaseService.createForm()
+      const result = await supabaseService.createForm(formData);
 
       if (result) {
         toast.success("Form saved successfully to database!");

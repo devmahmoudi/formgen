@@ -28,16 +28,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
   ArrowLeft,
   Search,
   Filter,
@@ -51,13 +41,16 @@ import {
   ChevronsRight,
   Trash2,
   X,
-  AlertTriangle,
   Pencil,
   Link,
   Plus,
 } from "lucide-react";
 import { toast } from "sonner";
-import { supabaseService } from "@/services/supabase.service";
+import {
+  supabaseService,
+  type Filter as SupabaseFilter,
+} from "@/services/supabase.service";
+import DeleteResponseConfirmation from "@/components/delete-response-confirmation";
 
 interface FormField {
   id: string;
@@ -121,12 +114,12 @@ export default function ResponsesIndex() {
   const pageSizes = [10, 25, 50, 100];
 
   // Delete state
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [responseToDelete, setResponseToDelete] = useState<{
-    id: string;
-    identifier: string;
-  } | null>(null);
+  const [responseToDelete, setResponseToDelete] = useState<FormResponse | null>(null);
+
+  useEffect(() => {
+    setDeleteDialogOpen(responseToDelete !== null)
+  }, [responseToDelete]);
 
   // Fetch related form data for relation fields
   const fetchRelatedFormData = async (fields: FormField[]) => {
@@ -139,10 +132,11 @@ export default function ResponsesIndex() {
 
       try {
         const formId = field.relationConfig!.formId!;
-        const responses = await graphqlService.getFormResponses(formId);
+        // REPLACED: graphqlService.getFormResponses → supabaseService.getFormResponses
+        const responses = await supabaseService.getFormResponses(formId);
 
-        // Parse the related form to get display field configuration
-        const relatedForm = await graphqlService.getFormById(formId);
+        // REPLACED: graphqlService.getFormById → supabaseService.getFormById
+        const relatedForm = await supabaseService.getFormById(formId);
         let relatedFormFields: FormField[] = [];
 
         if (relatedForm && relatedForm.schema) {
@@ -165,10 +159,8 @@ export default function ResponsesIndex() {
         responses.forEach((response: any) => {
           let data: Record<string, any> = {};
           try {
-            data =
-              typeof response.data === "string"
-                ? JSON.parse(response.data)
-                : response.data;
+            // For supabase, data is already parsed
+            data = response.data;
           } catch (error) {
             console.error("Error parsing related response data:", error);
           }
@@ -221,8 +213,6 @@ export default function ResponsesIndex() {
   ): string => {
     if (!value) return "Not selected";
 
-    // Check if this is a form ID instead of a response ID
-    // If it looks like a numeric ID (form ID), we need to find the actual response
     if (field.relationConfig?.formId) {
       const formData = relatedFormData[field.relationConfig.formId];
       if (!formData) return `Loading... (Form: ${field.relationConfig.formId})`;
@@ -272,7 +262,8 @@ export default function ResponsesIndex() {
     const fetchFormDetails = async () => {
       setLoading(true);
       try {
-        const form = await graphqlService.getFormById(formId);
+        // REPLACED: graphqlService.getFormById → supabaseService.getFormById
+        const form = await supabaseService.getFormById(formId);
         if (!form) {
           toast.error("Form not found");
           navigate("/form");
@@ -327,8 +318,7 @@ export default function ResponsesIndex() {
     setLoading(true);
     try {
       // Build filters object with implicit operators
-      const activeFilters: Record<string, { operator: string; value: any }> =
-        {};
+      const activeFilters: Record<string, SupabaseFilter> = {};
 
       // Add search term as a filter if present
       if (searchTerm.trim()) {
@@ -391,15 +381,15 @@ export default function ResponsesIndex() {
         }
       });
 
-      // Fetch from Supabase with filters and pagination
-      const result = await graphqlService.getFormResponsesWithFilters(
+      // REPLACED: graphqlService.getFormResponsesWithFilters → supabaseService.getFormResponsesWithFilters
+      const result = await supabaseService.getFormResponsesWithFilters(
         formId,
         activeFilters,
         currentPage,
         pageSize
       );
 
-      setResponses(result.responses);
+      setResponses(result.data);
       setTotalCount(result.total);
     } catch (error: any) {
       console.error("Error fetching responses:", error);
@@ -558,32 +548,12 @@ export default function ResponsesIndex() {
     }
   };
 
-  // Delete response functions
-  const handleDeleteClick = (responseId: string, responseData: any) => {
-    let identifier = "this response";
-    try {
-      const data = responseData;
-      const firstField = Object.values(data)[0];
-      if (firstField && String(firstField).trim()) {
-        const fieldValue = String(firstField);
-        identifier = `response "${fieldValue.substring(0, 30)}${
-          fieldValue.length > 30 ? "..." : ""
-        }"`;
-      }
-    } catch (error) {
-      console.error("Error parsing response data:", error);
-    }
-
-    setResponseToDelete({ id: responseId, identifier });
-    setDeleteDialogOpen(true);
-  };
-
   const handleDeleteConfirm = async () => {
     if (!responseToDelete) return;
 
-    setDeletingId(responseToDelete.id);
     try {
-      await graphqlService.deleteResponse(responseToDelete.id);
+      // REPLACED: graphqlService.deleteResponse → supabaseService.deleteResponse
+      await supabaseService.deleteResponse(responseToDelete.id);
 
       // Remove from local state
       setResponses((prev) =>
@@ -596,7 +566,6 @@ export default function ResponsesIndex() {
       console.error("Delete error:", error);
       toast.error(`Failed to delete response: ${error.message}`);
     } finally {
-      setDeletingId(null);
       setDeleteDialogOpen(false);
       setResponseToDelete(null);
     }
@@ -685,7 +654,7 @@ export default function ResponsesIndex() {
 
   // Render table actions cell
   const renderActionsCell = (response: FormResponse) => {
-    const isDeleting = deletingId === response.id;
+    const isDeleting = responseToDelete?.id === response.id;
 
     return (
       <TableCell className="w-44">
@@ -717,7 +686,10 @@ export default function ResponsesIndex() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => handleDeleteClick(response.id, response.data)}
+            // onClick={() => handleDeleteClick(response.id, response.data)}
+            onClick={() => {
+              setResponseToDelete(response);
+            }}
             disabled={isDeleting}
             className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
             title="Delete response"
@@ -864,7 +836,10 @@ export default function ResponsesIndex() {
               <Download className="w-4 h-4 mr-2" />
               Export CSV
             </Button>
-            <Button className="cursor-pointer" onClick={() => navigate(`/form/submit/${formId}`)}>
+            <Button
+              className="cursor-pointer"
+              onClick={() => navigate(`/form/submit/${formId}`)}
+            >
               <Plus className="w-4 h-4 mr-2" />
               Create New {formTitle}
             </Button>
@@ -1066,21 +1041,30 @@ export default function ResponsesIndex() {
                   </TableHeader>
                   <TableBody>
                     {responses.map((response) => (
-                      <TableRow key={response.id}>
-                        <TableCell className="font-medium">
-                          {formatDate(response.created_at)}
-                        </TableCell>
-                        {formFields.map((field) => {
-                          const value = response.data[field.id];
-                          return (
-                            <TableCell key={`${response.id}-${field.id}`}>
-                              {renderTableCell(field, value)}
-                            </TableCell>
-                          );
-                        })}
-                        {renderActionsCell(response)}
-                      </TableRow>
+                      <>
+                        <TableRow key={response.id}>
+                          <TableCell className="font-medium">
+                            {formatDate(response.created_at)}
+                          </TableCell>
+                          {formFields.map((field) => {
+                            const value = response.data[field.id];
+                            return (
+                              <TableCell key={`${response.id}-${field.id}`}>
+                                {renderTableCell(field, value)}
+                              </TableCell>
+                            );
+                          })}
+                          {renderActionsCell(response)}
+                        </TableRow>
+                      </>
                     ))}
+                    <DeleteResponseConfirmation
+                      response={responseToDelete}
+                      open={deleteDialogOpen}
+                      onOpenChange={setDeleteDialogOpen}
+                      onConfirm={handleDeleteConfirm}
+                      onCancel={() => setResponseToDelete(null)}
+                    />
                   </TableBody>
                 </Table>
               </div>
@@ -1088,48 +1072,6 @@ export default function ResponsesIndex() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <div className="flex items-center gap-2">
-              <div className="rounded-full bg-red-100 p-2">
-                <AlertTriangle className="h-5 w-5 text-red-600" />
-              </div>
-              <AlertDialogTitle>
-                Delete {responseToDelete?.identifier || "Response"}?
-              </AlertDialogTitle>
-            </div>
-            <AlertDialogDescription>
-              This action cannot be undone. The response will be permanently
-              deleted from the database.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deletingId === responseToDelete?.id}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteConfirm}
-              disabled={deletingId === responseToDelete?.id}
-              className="bg-red-600 text-white hover:bg-red-700 focus:ring-red-600"
-            >
-              {deletingId === responseToDelete?.id ? (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  Delete
-                </>
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

@@ -32,8 +32,9 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
-import { supabaseService } from "@/services/supabase.service";
+import { supabaseService, type FormResponse } from "@/services/supabase.service";
 import { Label } from "@/components/ui/label";
+import DeleteResponseConfirmation from "@/components/delete-response-confirmation";
 
 interface FormField {
   id: string;
@@ -82,9 +83,75 @@ export default function ShowResponse() {
   const [responseUpdatedAt, setResponseUpdatedAt] = useState("");
   const [fieldValues, setFieldValues] = useState<FieldValueDisplay[]>([]);
   
+  // Delete confirmation state
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [responseToDelete, setResponseToDelete] = useState<FormResponse | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  
   // Relation field data
   const [relatedFormData, setRelatedFormData] = useState<RelatedFormData>({});
   const [loadingRelations, setLoadingRelations] = useState(false);
+
+  // Update field values when fields or responseData changes
+  useEffect(() => {
+    if (fields.length > 0 && Object.keys(responseData).length > 0) {
+      const displayValues: FieldValueDisplay[] = fields.map((field) => {
+        const value = responseData[field.id];
+        let formattedValue = "";
+        let icon = <Type className="w-4 h-4" />;
+
+        switch (field.type) {
+          case "text":
+          case "textarea":
+            formattedValue = value || "Not provided";
+            icon = <FileText className="w-4 h-4" />;
+            break;
+          case "email":
+            formattedValue = value || "Not provided";
+            icon = <Mail className="w-4 h-4" />;
+            break;
+          case "number":
+            formattedValue = value !== undefined && value !== "" ? value.toString() : "Not provided";
+            icon = <Hash className="w-4 h-4" />;
+            break;
+          case "select":
+          case "dropdown":
+            formattedValue = value || "Not selected";
+            icon = <ChevronRight className="w-4 h-4" />;
+            break;
+          case "radio":
+            formattedValue = value || "Not selected";
+            icon = <Radio className="w-4 h-4" />;
+            break;
+          case "checkbox":
+            formattedValue = value ? "Yes" : "No";
+            icon = <CheckSquare className="w-4 h-4" />;
+            break;
+          case "date":
+            formattedValue = value ? new Date(value).toLocaleDateString() : "Not provided";
+            icon = <Calendar className="w-4 h-4" />;
+            break;
+          case "relation":
+            formattedValue = value || "Not selected";
+            icon = <Link className="w-4 h-4" />;
+            break;
+          default:
+            formattedValue = value || "Not provided";
+        }
+
+        return {
+          label: field.label,
+          value,
+          type: field.type,
+          icon,
+          formattedValue,
+          field
+        };
+      });
+
+      setFieldValues(displayValues);
+    }
+  }, [fields, responseData]);
 
   // Fetch form schema and response data
   useEffect(() => {
@@ -100,20 +167,36 @@ export default function ShowResponse() {
       setResponseNotFound(false);
 
       try {
-        // Fetch form details
-        const form = await graphqlService.getFormById(formId);
+        console.log('Fetching data for formId:', formId, 'responseId:', responseId);
+
+        // Try to fetch form with different ID formats
+        let form = null;
+        let fetchedFormId = formId;
+
+        // First try with string ID
+        form = await supabaseService.getFormById(formId);
+        
+        // If not found and ID is numeric, try with number
+        if (!form && !isNaN(Number(formId))) {
+          form = await supabaseService.getFormById(Number(formId));
+          if (form) {
+            fetchedFormId = form.id.toString();
+          }
+        }
 
         if (!form) {
+          console.error('Form not found with ID:', formId);
           setFormNotFound(true);
           toast.error("Form not found");
           return;
         }
 
+        console.log('Form found:', form);
         setFormTitle(form.title || "");
         setFormDescription(form.description || "");
 
+        // Parse form schema to get fields
         let parsedFields: FormField[] = [];
-
         try {
           let schema = form.schema;
           if (typeof schema === "string") {
@@ -127,19 +210,37 @@ export default function ShowResponse() {
           console.error("Error parsing schema:", parseError);
           toast.error("Error loading form structure");
         }
-
+        console.log('Parsed fields:', parsedFields);
         setFields(parsedFields);
 
-        // Fetch response data
-        const response = await graphqlService.getResponseById(responseId);
+        // Try to fetch response with different ID formats
+        let response = null;
+
+        // First try with string ID
+        response = await supabaseService.getResponseById(responseId);
+        
+        // If not found and ID is numeric, try with number
+        if (!response && !isNaN(Number(responseId))) {
+          response = await supabaseService.getResponseById(Number(responseId));
+        }
 
         if (!response) {
+          console.error('Response not found with ID:', responseId);
           setResponseNotFound(true);
           toast.error("Response not found");
           return;
         }
 
-        if (response.form_id !== formId) {
+        console.log('Response found:', response);
+
+        // Check if response belongs to the form (compare as strings)
+        const responseFormId = response.form_id.toString();
+        const currentFormId = fetchedFormId.toString();
+        
+        console.log('Comparing form IDs - response.form_id:', responseFormId, 'currentFormId:', currentFormId);
+        
+        if (responseFormId !== currentFormId) {
+          console.error('Response does not belong to this form');
           toast.error("Response does not belong to this form");
           setResponseNotFound(true);
           return;
@@ -150,72 +251,15 @@ export default function ShowResponse() {
 
         let data: Record<string, any> = {};
         try {
-          data = typeof response.data === 'string' 
-            ? JSON.parse(response.data) 
-            : response.data;
+          // In Supabase, data is already an object
+          data = response.data || {};
+          console.log('Response data:', data);
         } catch (error) {
           console.error("Error parsing response data:", error);
           data = {};
         }
 
         setResponseData(data);
-
-        // Prepare initial field values for display
-        const displayValues: FieldValueDisplay[] = parsedFields.map((field) => {
-          const value = data[field.id];
-          let formattedValue = "";
-          let icon = <Type className="w-4 h-4" />;
-
-          switch (field.type) {
-            case "text":
-            case "textarea":
-              formattedValue = value || "Not provided";
-              icon = <FileText className="w-4 h-4" />;
-              break;
-            case "email":
-              formattedValue = value || "Not provided";
-              icon = <Mail className="w-4 h-4" />;
-              break;
-            case "number":
-              formattedValue = value !== undefined && value !== "" ? value.toString() : "Not provided";
-              icon = <Hash className="w-4 h-4" />;
-              break;
-            case "select":
-            case "dropdown":
-              formattedValue = value || "Not selected";
-              icon = <ChevronRight className="w-4 h-4" />;
-              break;
-            case "radio":
-              formattedValue = value || "Not selected";
-              icon = <Radio className="w-4 h-4" />;
-              break;
-            case "checkbox":
-              formattedValue = value ? "Yes" : "No";
-              icon = <CheckSquare className="w-4 h-4" />;
-              break;
-            case "date":
-              formattedValue = value ? new Date(value).toLocaleDateString() : "Not provided";
-              icon = <Calendar className="w-4 h-4" />;
-              break;
-            case "relation":
-              formattedValue = value || "Not selected";
-              icon = <Link className="w-4 h-4" />;
-              break;
-            default:
-              formattedValue = value || "Not provided";
-          }
-
-          return {
-            label: field.label,
-            value,
-            type: field.type,
-            icon,
-            formattedValue,
-            field
-          };
-        });
-
-        setFieldValues(displayValues);
 
         // Fetch related form data for relation fields
         await fetchRelatedFormData(parsedFields, data);
@@ -248,10 +292,9 @@ export default function ShowResponse() {
         
         // Only fetch if we haven't already fetched this form's data
         if (!newRelatedFormData[relatedFormId]) {
-          const responses = await graphqlService.getFormResponses(relatedFormId);
+          const responses = await supabaseService.getFormResponses(relatedFormId);
           
-          // Parse the related form to get display field configuration
-          const relatedForm = await graphqlService.getFormById(relatedFormId);
+          const relatedForm = await supabaseService.getFormById(relatedFormId);
           let relatedFormFields: FormField[] = [];
           
           if (relatedForm && relatedForm.schema) {
@@ -274,15 +317,13 @@ export default function ShowResponse() {
           responses.forEach((response: any) => {
             let data: Record<string, any> = {};
             try {
-              data = typeof response.data === 'string' 
-                ? JSON.parse(response.data) 
-                : response.data;
+              data = response.data || {};
             } catch (error) {
               console.error("Error parsing related response data:", error);
             }
 
             // Get display value
-            let displayValue = `Response ${response.id?.substring?.(0, 8) || 'Unknown'}...`;
+            let displayValue = `Response ${response.id?.toString()?.substring(0, 8) || 'Unknown'}...`;
             
             if (field.relationConfig?.displayField && data[field.relationConfig.displayField]) {
               displayValue = String(data[field.relationConfig.displayField]);
@@ -308,22 +349,6 @@ export default function ShowResponse() {
       
       setRelatedFormData(newRelatedFormData);
       
-      // Update field values with relation display values
-      setFieldValues(prev => prev.map(fieldValue => {
-        if (fieldValue.type === 'relation' && fieldValue.value && fieldValue.field.relationConfig?.formId) {
-          const relatedFormId = fieldValue.field.relationConfig.formId;
-          const formData = newRelatedFormData[relatedFormId];
-          
-          if (formData && formData[fieldValue.value]) {
-            return {
-              ...fieldValue,
-              formattedValue: formData[fieldValue.value].displayValue
-            };
-          }
-        }
-        return fieldValue;
-      }));
-      
     } catch (error) {
       console.error("Error fetching related form data:", error);
     } finally {
@@ -332,12 +357,12 @@ export default function ShowResponse() {
   };
 
   // Get display value for a relation field
-  const getRelationDisplayValue = (field: FormField, value: string | undefined): string => {
+  const getRelationDisplayValue = (field: FormField, value: string | number | undefined): string => {
     if (!value) return "Not selected";
     
     if (field.relationConfig?.formId) {
       const formData = relatedFormData[field.relationConfig.formId];
-      if (!formData) return `Loading... (ID: ${value.substring(0, 8)}...)`;
+      if (!formData) return `Loading... (ID: ${value.toString().substring(0, 8)}...)`;
       
       const responseData = formData[value];
       
@@ -345,10 +370,10 @@ export default function ShowResponse() {
         return responseData.displayValue;
       }
       
-      return `ID: ${value.substring(0, 8)}...`;
+      return `ID: ${value.toString().substring(0, 8)}...`;
     }
     
-    return `ID: ${value.substring(0, 8)}...`;
+    return `ID: ${value.toString().substring(0, 8)}...`;
   };
 
   const handleCopyToClipboard = () => {
@@ -361,19 +386,52 @@ export default function ShowResponse() {
     navigate(`/form/${formId}/responses/edit/${responseId}`);
   };
 
-  const handleDelete = async () => {
-    if (!responseId || !window.confirm("Are you sure you want to delete this response? This action cannot be undone.")) {
-      return;
-    }
-
+  // Handle delete button click
+  const handleDeleteClick = async () => {
     try {
-      await graphqlService.deleteResponse(responseId);
+      // Fetch the response to show in confirmation dialog
+      let response = await supabaseService.getResponseById(responseId!);
+      
+      // If not found with string ID, try numeric ID
+      if (!response && !isNaN(Number(responseId))) {
+        response = await supabaseService.getResponseById(Number(responseId!));
+      }
+      
+      if (response) {
+        setResponseToDelete(response);
+        setShowDeleteDialog(true);
+      } else {
+        toast.error("Could not load response for deletion");
+      }
+    } catch (error) {
+      console.error("Error loading response for deletion:", error);
+      toast.error("Error loading response");
+    }
+  };
+
+  // Handle delete confirmation
+  const handleDeleteConfirm = async () => {
+    if (!responseToDelete) return;
+    
+    setDeleting(true);
+    try {
+      await supabaseService.deleteResponse(responseToDelete.id);
       toast.success("Response deleted successfully");
       navigate(`/form/${formId}/responses`);
     } catch (error: any) {
       console.error("Delete error:", error);
       toast.error(`Failed to delete response: ${error.message}`);
+    } finally {
+      setDeleting(false);
+      setShowDeleteDialog(false);
+      setResponseToDelete(null);
     }
+  };
+
+  // Handle delete cancellation
+  const handleDeleteCancel = () => {
+    setShowDeleteDialog(false);
+    setResponseToDelete(null);
   };
 
   const formatDate = (dateString: string) => {
@@ -583,10 +641,23 @@ export default function ShowResponse() {
               <Button
                 variant="destructive"
                 size="sm"
-                onClick={handleDelete}
+                onClick={handleDeleteClick}
+                disabled={deleting}
               >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Delete
+                {deleting ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete
+                  </>
+                )}
               </Button>
             </div>
           </div>
@@ -648,8 +719,14 @@ export default function ShowResponse() {
                 <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                 <h3 className="text-lg font-semibold mb-2">No Form Fields</h3>
                 <p className="text-muted-foreground">
-                  This form doesn't have any fields.
+                  This form doesn't have any fields or fields couldn't be loaded.
                 </p>
+                <div className="mt-4 p-4 bg-muted rounded-md">
+                  <p className="text-sm font-mono">Available data fields:</p>
+                  <pre className="text-xs mt-2 overflow-auto">
+                    {JSON.stringify(responseData, null, 2)}
+                  </pre>
+                </div>
               </div>
             ) : (
               <div className="space-y-6">
@@ -739,6 +816,15 @@ export default function ShowResponse() {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <DeleteResponseConfirmation
+        response={responseToDelete}
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        onConfirm={handleDeleteConfirm}
+        onCancel={handleDeleteCancel}
+      />
     </div>
   );
 }

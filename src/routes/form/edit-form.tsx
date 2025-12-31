@@ -51,7 +51,8 @@ export default function EditForm() {
       setFormNotFound(false);
       
       try {
-        const formData = await graphqlService.getFormById(formId);
+        // Changed from graphqlService.getFormById() to supabaseService.getFormById()
+        const formData = await supabaseService.getFormById(formId);
         
         if (!formData) {
           setFormNotFound(true);
@@ -66,16 +67,21 @@ export default function EditForm() {
         };
         
         try {
+          // Supabase stores schema as JSON object, no need to parse string
           let schema = formData.schema;
-          if (typeof schema === 'string') {
-            schema = JSON.parse(schema);
-          }
           
           if (schema && typeof schema === 'object') {
             parsedSchema = {
               title: schema.title || formData.title || "",
               description: schema.description || formData.description || "",
               fields: schema.fields || []
+            };
+          } else {
+            // Fallback if schema is somehow not an object
+            parsedSchema = {
+              title: formData.title || "",
+              description: formData.description || "",
+              fields: []
             };
           }
         } catch (parseError) {
@@ -176,12 +182,11 @@ export default function EditForm() {
       const formData = {
         title: form.title,
         description: form.description || null,
-        schema: JSON.stringify(form),
-        updated_at: new Date().toISOString()
+        schema: form, // Store the form object directly (not stringified)
       };
 
-      // Note: You'll need to add an updateForm method to your graphqlService
-      const result = await graphqlService.updateForm(formId, formData);
+      // Changed from graphqlService.updateForm() to supabaseService.updateForm()
+      const result = await supabaseService.updateForm(formId, formData);
 
       if (result) {
         toast.success("Form updated successfully!");
@@ -205,7 +210,8 @@ export default function EditForm() {
     }
 
     try {
-      await graphqlService.deleteForm(formId);
+      // Changed from graphqlService.deleteForm() to supabaseService.deleteForm()
+      await supabaseService.deleteForm(formId);
       toast.success("Form deleted successfully");
       navigate("/form");
     } catch (error: any) {

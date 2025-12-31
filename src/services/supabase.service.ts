@@ -2,7 +2,7 @@
 import { supabase } from "@/lib/supabase-client";
 
 export interface Form {
-  id: string;
+  id: string | number; // Allow both string and number
   title: string;
   description: string | null;
   schema: any;
@@ -11,8 +11,8 @@ export interface Form {
 }
 
 export interface FormResponse {
-  id: string;
-  form_id: string;
+  id: string | number; // Allow both string and number
+  form_id: string | number; // Allow both string and number
   data: any;
   created_at: string;
   updated_at?: string;

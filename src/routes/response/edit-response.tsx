@@ -24,7 +24,6 @@ import {
   Command,
   CommandEmpty,
   CommandGroup,
-  CommandInput,
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
@@ -107,8 +106,8 @@ export default function EditResponse() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Fetch form details
-        const form = await graphqlService.getFormById(formId);
+        // REPLACED: graphqlService.getFormById → supabaseService.getFormById
+        const form = await supabaseService.getFormById(formId);
         if (!form) {
           toast.error("Form not found");
           navigate(`/form/${formId}/responses`);
@@ -132,8 +131,8 @@ export default function EditResponse() {
         }
         setFormFields(parsedFields);
 
-        // Fetch response data
-        const response = await graphqlService.getResponseById(responseId);
+        // REPLACED: graphqlService.getResponseById → supabaseService.getResponseById
+        const response = await supabaseService.getResponseById(responseId);
         if (!response) {
           toast.error("Response not found");
           navigate(`/form/${formId}/responses`);
@@ -144,9 +143,8 @@ export default function EditResponse() {
         let responseData: Record<string, any> = {};
         try {
           // The response.data field contains the form field values
-          responseData = typeof response.data === "string" 
-            ? JSON.parse(response.data) 
-            : response.data;
+          // In Supabase, data is already an object
+          responseData = response.data || {};
         } catch (error) {
           console.error("Error parsing response data:", error);
           responseData = {};
@@ -179,10 +177,11 @@ export default function EditResponse() {
       
       try {
         const relatedFormId = field.relationConfig!.formId!;
-        const responses = await graphqlService.getFormResponses(relatedFormId);
+        // REPLACED: graphqlService.getFormResponses → supabaseService.getFormResponses
+        const responses = await supabaseService.getFormResponses(relatedFormId);
         
-        // Parse the related form to get display field configuration
-        const relatedForm = await graphqlService.getFormById(relatedFormId);
+        // REPLACED: graphqlService.getFormById → supabaseService.getFormById
+        const relatedForm = await supabaseService.getFormById(relatedFormId);
         let relatedFormFields: FormField[] = [];
         
         if (relatedForm && relatedForm.schema) {
@@ -205,9 +204,8 @@ export default function EditResponse() {
         responses.forEach((response: any) => {
           let data: Record<string, any> = {};
           try {
-            data = typeof response.data === 'string' 
-              ? JSON.parse(response.data) 
-              : response.data;
+            // In Supabase, data is already an object
+            data = response.data || {};
           } catch (error) {
             console.error("Error parsing related response data:", error);
           }
@@ -244,13 +242,13 @@ export default function EditResponse() {
         if (currentValue && !options.some(opt => opt.id === String(currentValue))) {
           // Try to fetch the specific response
           try {
-            const specificResponse = await graphqlService.getResponseById(currentValue);
+            // REPLACED: graphqlService.getResponseById → supabaseService.getResponseById
+            const specificResponse = await supabaseService.getResponseById(currentValue);
             if (specificResponse) {
               let data: Record<string, any> = {};
               try {
-                data = typeof specificResponse.data === 'string' 
-                  ? JSON.parse(specificResponse.data) 
-                  : specificResponse.data;
+                // In Supabase, data is already an object
+                data = specificResponse.data || {};
               } catch (error) {
                 console.error("Error parsing specific response data:", error);
               }
@@ -340,8 +338,8 @@ export default function EditResponse() {
     try {
       console.log("Submitting form data:", formData); // Debug log
       
-      // Pass only the form field data, not the entire response object
-      const updatedResponse = await graphqlService.updateResponse(responseId!, formData);
+      // REPLACED: graphqlService.updateResponse → supabaseService.updateResponse
+      const updatedResponse = await supabaseService.updateResponse(responseId!, formData);
       
       if (updatedResponse) {
         toast.success("Response updated successfully");
