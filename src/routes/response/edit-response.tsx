@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Command,
   CommandEmpty,
@@ -389,12 +390,22 @@ export default function EditResponse() {
     return selectedOption?.displayValue || `ID: ${String(value).substring(0, 8)}...`;
   };
 
+  // Safely get field options, filtering out empty strings
+  const getFieldOptions = (field: FormField): string[] => {
+    const options = field.options || [];
+    return options.filter(opt => {
+      if (typeof opt !== 'string') return false;
+      return opt.trim() !== "";
+    });
+  };
+
   // Render field input based on type
   const renderFieldInput = (field: FormField) => {
     const value = formData[field.id];
     const isLoading = loadingRelations[field.id];
     const options = relationOptions[field.id] || [];
     const isOpen = openRelationPopovers[field.id] || false;
+    const fieldOptions = getFieldOptions(field);
 
     switch (field.type) {
       case "text":
@@ -436,26 +447,69 @@ export default function EditResponse() {
           </div>
         );
 
-      case "select":
       case "radio":
+        return (
+          <RadioGroup
+            value={value || ""}
+            onValueChange={(val) => handleFieldChange(field.id, val)}
+            className="space-y-2"
+          >
+            {fieldOptions.length > 0 ? (
+              fieldOptions.map((option, index) => (
+                <div key={index} className="flex items-center space-x-2">
+                  <RadioGroupItem
+                    value={option}
+                    id={`${field.id}-${index}`}
+                  />
+                  <Label
+                    htmlFor={`${field.id}-${index}`}
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+                  >
+                    {option}
+                  </Label>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground italic">
+                No options defined for this field
+              </p>
+            )}
+          </RadioGroup>
+        );
+
+      case "select":
       case "dropdown":
         return (
           <Select
             value={value || ""}
-            onValueChange={(val) => handleFieldChange(field.id, val)}
+            onValueChange={(val) => {
+              // Handle empty selection
+              const finalValue = val === "__empty__" ? "" : val;
+              handleFieldChange(field.id, finalValue);
+            }}
           >
             <SelectTrigger>
               <SelectValue placeholder={field.placeholder || `Select ${field.label.toLowerCase()}...`} />
             </SelectTrigger>
             <SelectContent>
-              {!field.required && (
-                <SelectItem value="">-- Not selected --</SelectItem>
+              {/* Only render the "Not selected" option if field is not required */}
+              {!field.required && fieldOptions.length > 0 && (
+                <SelectItem value="__empty__">-- Not selected --</SelectItem>
               )}
-              {field.options?.map((option) => (
-                <SelectItem key={option} value={option}>
-                  {option}
+              
+              {/* Render valid options */}
+              {fieldOptions.length > 0 ? (
+                fieldOptions.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option}
+                  </SelectItem>
+                ))
+              ) : (
+                // Show message if no valid options
+                <SelectItem value="__no_options__" disabled>
+                  No options defined for this field
                 </SelectItem>
-              ))}
+              )}
             </SelectContent>
           </Select>
         );
