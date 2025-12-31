@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { createClient } from "@supabase/supabase-js";
-import { GalleryVerticalEnd, Mail, Lock, Loader2, AlertCircle } from "lucide-react";
+import { GalleryVerticalEnd, Mail, Lock, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -84,7 +84,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
+    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4">
       <div className={cn("flex flex-col gap-6 w-full max-w-md")}>
         <form onSubmit={handleLogin}>
           <FieldGroup>
