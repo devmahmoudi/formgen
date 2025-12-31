@@ -13,6 +13,7 @@ import EditForm from "./routes/form/edit-form";
 import ResponsesIndex from "./routes/response/responses-index";
 import EditResponse from "./routes/response/edit-response";
 import ShowResponse from "./routes/response/show-response";
+import LoginPage from "./routes/login";
 
 export const router = createBrowserRouter([
   {
@@ -38,6 +39,16 @@ export const router = createBrowserRouter([
       {
         path: "*",
         element: <NotFoundPage />,
+      },
+    ],
+  },
+  {
+    path: "/auth",
+    element: <Layout />,
+    children: [
+      {
+        path: "login",
+        element: <LoginPage />,
       },
     ],
   },
