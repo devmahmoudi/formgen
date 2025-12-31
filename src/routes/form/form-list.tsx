@@ -15,7 +15,7 @@ import {
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
-import { graphqlService } from "@/services/graphql.service";
+import { supabaseService } from "@/services/supabase.service";
 import type { Form } from "@/types/form";
 import FormCard from "@/components/form-card";
 import type { FieldType } from "@/components/form-generator";

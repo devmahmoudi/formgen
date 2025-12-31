@@ -32,7 +32,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
-import { graphqlService } from "@/services/graphql.service";
+import { supabaseService } from "@/services/supabase.service";
 import { Label } from "@/components/ui/label";
 
 interface FormField {

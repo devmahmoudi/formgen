@@ -6,7 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Trash2, Plus, X, Link, AlertCircle, Info, Loader2 } from "lucide-react";
 import type { FormField, FieldType } from "./types";
-import { graphqlService } from "@/services/graphql.service";
+import { supabaseService } from "@/services/supabase.service";
 
 interface FieldItemProps {
   field: FormField;

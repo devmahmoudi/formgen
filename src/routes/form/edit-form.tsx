@@ -19,7 +19,7 @@ import {
   Plus 
 } from "lucide-react";
 import { toast } from "sonner";
-import { graphqlService } from "@/services/graphql.service";
+import { supabaseService } from "@/services/supabase.service";
 import type { FormSchema, FormField } from "./types";
 import FieldItem from "@/components/form-generator/field-item";
 

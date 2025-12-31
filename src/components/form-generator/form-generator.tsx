@@ -21,7 +21,7 @@ import { Switch } from "@/components/ui/switch";
 import FieldItem from "./field-item";
 import { Plus, Copy, Download, Save, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { graphqlService } from "@/services/graphql.service";
+import { supabaseService } from "@/services/supabase.service";
 import type { FormSchema, FormField, FieldType } from "./types";
 import { Link } from "react-router-dom";
 

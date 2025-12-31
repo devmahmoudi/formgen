@@ -33,7 +33,7 @@ import {
   Link,
 } from "lucide-react";
 import { toast } from "sonner";
-import { graphqlService } from "@/services/graphql.service";
+import { supabaseService } from "@/services/supabase.service";
 
 interface FormField {
   id: string;
