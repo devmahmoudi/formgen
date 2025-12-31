@@ -214,7 +214,7 @@ export default function FormList() {
               return (
                 <Card
                   key={form.id}
-                  className="hover:shadow-lg transition-shadow flex flex-col h-full"
+                  className="hover:shadow-lg transition-shadow flex flex-col h-full gap-0"
                 >
                   <CardHeader className="min-h-[5.1rem]">
                     <div className="flex justify-between items-start">
