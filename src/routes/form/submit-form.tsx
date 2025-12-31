@@ -33,7 +33,7 @@ import {
   Link,
 } from "lucide-react";
 import { toast } from "sonner";
-import { graphqlService } from "@/services/graphql.service";
+import { supabaseService } from "@/services/supabase.service";
 
 interface FormField {
   id: string;
@@ -54,7 +54,7 @@ interface RelatedResponse {
   data: Record<string, any>;
   created_at: string;
   displayValue: string;
-  formId: string; // The form ID that this response belongs to
+  formId: string;
 }
 
 export default function SubmitForm() {
@@ -90,7 +90,8 @@ export default function SubmitForm() {
       setFormNotFound(false);
 
       try {
-        const form = await graphqlService.getFormById(id);
+        // REPLACED: graphqlService.getFormById → supabaseService.getFormById
+        const form = await supabaseService.getFormById(id);
 
         if (!form) {
           setFormNotFound(true);
@@ -161,7 +162,8 @@ export default function SubmitForm() {
 
       try {
         const formId = field.relationConfig!.formId!;
-        const responses = await graphqlService.getFormResponses(formId);
+        // REPLACED: graphqlService.getFormResponses → supabaseService.getFormResponses
+        const responses = await supabaseService.getFormResponses(formId);
 
         // Ensure responses is an array
         if (!Array.isArray(responses)) {
@@ -178,45 +180,23 @@ export default function SubmitForm() {
 
         const formattedResponses = responses
           .map((response: any) => {
-            // Handle different response structures
-            const responseId =
-              response.id ||
-              response._id ||
-              response.response_id ||
-              `response_${Date.now()}_${Math.random()
-                .toString(36)
-                .substr(2, 9)}`;
+            // Supabase response structure is different from GraphQL
+            // response.id is already a string, no need for fallback
+            const responseId = response.id;
 
+            // In supabase, data is already a JSON object (not stringified)
             let data: Record<string, any> = {};
             try {
-              // Try different possible locations for the data
+              // For supabase, data field should already be parsed
               if (response.data) {
-                data =
-                  typeof response.data === "string"
-                    ? JSON.parse(response.data)
-                    : response.data;
-              } else if (response.values) {
-                data =
-                  typeof response.values === "string"
-                    ? JSON.parse(response.values)
-                    : response.values;
-              } else if (response.response_data) {
-                data =
-                  typeof response.response_data === "string"
-                    ? JSON.parse(response.response_data)
-                    : response.response_data;
+                data = response.data;
               } else {
                 // If no data field found, use the response object itself (excluding metadata)
                 const {
                   id,
-                  _id,
-                  response_id,
                   created_at,
-                  createdAt,
                   updated_at,
-                  updatedAt,
                   form_id,
-                  formId,
                   ...rest
                 } = response;
                 data = rest;
@@ -259,12 +239,7 @@ export default function SubmitForm() {
             }
 
             // Get created_at date
-            const createdAt =
-              response.created_at ||
-              response.createdAt ||
-              response.submitted_at ||
-              response.submittedAt ||
-              new Date().toISOString();
+            const createdAt = response.created_at || new Date().toISOString();
 
             return {
               id: responseId,
@@ -384,8 +359,8 @@ export default function SubmitForm() {
 
     setSubmitting(true);
     try {
-      // Store the response ID directly - NO CONVERSION NEEDED
-      const result = await graphqlService.submitFormResponse(id, formData);
+      // REPLACED: graphqlService.submitFormResponse → supabaseService.submitFormResponse
+      const result = await supabaseService.submitFormResponse(id, formData);
 
       if (result) {
         setIsSubmitted(true);
@@ -497,7 +472,7 @@ export default function SubmitForm() {
               value={fieldValue}
               onValueChange={(value) => handleInputChange(field.id, value)}
               options={responses.map((response) => ({
-                value: response.id, // Use response ID as value for selection
+                value: response.id,
                 label: response.displayValue,
                 description: `Submitted ${new Date(
                   response.created_at
@@ -670,9 +645,9 @@ export default function SubmitForm() {
             <p className="text-muted-foreground mb-4">
               The form you're looking for doesn't exist or has been removed.
             </p>
-            <Button onClick={() => navigate(`/form/${formData.id}/responses`)} variant="outline">
+            <Button onClick={() => navigate(-1)} variant="outline">
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Responses List
+              Go Back
             </Button>
           </CardContent>
         </Card>
@@ -741,11 +716,11 @@ export default function SubmitForm() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => navigate(`/form/${id}/responses`)}
+                onClick={() => navigate(-1)}
                 className="mb-4"
               >
                 <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Responses List
+                Go Back
               </Button>
 
               <h1 className="text-3xl font-bold mb-2">{formTitle}</h1>

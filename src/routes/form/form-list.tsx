@@ -1,24 +1,33 @@
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
+  CardDescription,
   CardFooter,
   CardHeader,
+  CardTitle,
 } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
+  Eye,
+  Edit,
+  Trash2,
+  Copy,
+  Calendar,
   FileText,
   RefreshCw,
   Plus,
+  LayersPlus,
+  Database,
 } from "lucide-react";
-import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
-import { graphqlService } from "@/services/graphql.service";
+// Changed import from graphqlService to supabaseService
+import { supabaseService } from "@/services/supabase.service";
 import type { Form } from "@/types/form";
-import FormCard from "@/components/form-card";
-import type { FieldType } from "@/components/form-generator";
 
 export default function FormList() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -35,7 +44,8 @@ export default function FormList() {
     setLoading(true);
     setError(null);
     try {
-      const data = await graphqlService.getForms();
+      // Changed from graphqlService.getForms() to supabaseService.getForms()
+      const data = await supabaseService.getForms();
       setForms(data);
     } catch (err: any) {
       setError(err.message);
@@ -52,7 +62,8 @@ export default function FormList() {
 
     setDeletingId(id);
     try {
-      await graphqlService.deleteForm(id);
+      // Changed from graphqlService.deleteForm(id) to supabaseService.deleteForm(id)
+      await supabaseService.deleteForm(id);
       toast.success(`Form "${title}" deleted successfully`);
 
       // Remove the deleted form from local state
@@ -96,6 +107,11 @@ export default function FormList() {
     } catch {
       return { fields: [] };
     }
+  };
+
+  const countFields = (schema: any) => {
+    const parsed = parseSchema(schema);
+    return parsed?.fields?.length || 0;
   };
 
   if (loading && forms.length === 0) {
@@ -158,6 +174,10 @@ export default function FormList() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={fetchForms}>
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Refresh
+            </Button>
             <Link to="/form/generator">
               <Button className="cursor-pointer">
                 <Plus className="w-4 h-4 mr-2" />
@@ -188,20 +208,126 @@ export default function FormList() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {forms.map((form: Form) => {
               const parsedSchema = parseSchema(form.schema);
-              const fieldTypes: FieldType[] = parsedSchema?.fields
+              const fieldTypes = parsedSchema?.fields
                 ? Array.from(
                     new Set(parsedSchema.fields.map((f: any) => f.type))
                   )
                 : [];
-                
+
               return (
-                <FormCard
-                  form={form}
-                  fieldTypes={fieldTypes}
-                  handleDelete={handleDelete}
-                  handleCopySchema={handleCopySchema}
-                  deletingId={deletingId}
-                />
+                <Card
+                  key={form.id}
+                  className="hover:shadow-lg transition-shadow flex flex-col h-full"
+                >
+                  <CardHeader className="pb-3">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1 min-w-0">
+                        <CardTitle className="text-lg line-clamp-1">
+                          {form.title}
+                        </CardTitle>
+                        {form.description && (
+                          <CardDescription className="mt-1 line-clamp-2 min-h-[2.5rem]">
+                            {form.description}
+                          </CardDescription>
+                        )}
+                      </div>
+                      <Badge variant="outline" className="ml-2 flex-shrink-0">
+                        {countFields(form.schema)} fields
+                      </Badge>
+                    </div>
+                  </CardHeader>
+
+                  <CardContent className="flex-1 pb-3">
+                    <div className="space-y-3">
+                      {fieldTypes.length > 0 ? (
+                        <div className="pt-2">
+                          <p className="text-sm font-medium mb-2">
+                            Field Types:
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {fieldTypes.slice(0, 3).map((type: string) => (
+                              <Badge
+                                key={type}
+                                variant="secondary"
+                                className="text-xs"
+                              >
+                                {type}
+                              </Badge>
+                            ))}
+                            {fieldTypes.length > 3 && (
+                              <Badge variant="secondary" className="text-xs">
+                                +{fieldTypes.length - 3} more
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-muted-foreground italic pt-8 text-center">
+                          No fields defined
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+
+                  <CardFooter className="border-t pt-4 mt-auto">
+                    <div className="flex justify-between w-full">
+                      <div className="flex gap-1">
+                        <Link to={`/form/submit/${form.id}`}>
+                          <Button className="cursor-pointer" size="sm">
+                            <LayersPlus className="w-4 h-4 mr-1" />
+                            <span className="md:hidden xl:inline">
+                              Data Entry
+                            </span>
+                          </Button>
+                        </Link>
+
+                        <Link to={`/form/${form.id}/responses`}>
+                          <Button className="cursor-pointer" size="sm">
+                            <Database className="w-4 h-4 mr-1" />
+                            <span className="md:hidden xl:inline">Responses</span>
+                          </Button>
+                        </Link>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            handleCopySchema(form.schema, form.title)
+                          }
+                          className="cursor-pointer"
+                        >
+                          <Copy className="w-4 h-4" />
+                        </Button>
+
+                        <Link to={`/form/edit/${form.id}`}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="cursor-pointer"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                        </Link>
+
+                        <Button
+                          className="cursor-pointer"
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => handleDelete(form.id, form.title)}
+                          disabled={deletingId === form.id}
+                        >
+                          {deletingId === form.id ? (
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </CardFooter>
+                </Card>
               );
             })}
           </div>
